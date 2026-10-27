@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Радио Интерхит</title>
+<meta name="description" content="Слушайте Радио Интерхит на живо">
+<meta name="theme-color" content="#0b0709">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Интерхит">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+/* Layout: една колона, логото горе, голям бутон в центъра, после съобщение, таймер, споделяне */
+:root{
+  --bg:#0b0709; --panel:#171013; --line:#33242a;
+  --fg:#f6eef0; --muted:#c3b2b7;
+  --red:#ff2a2a; --red-deep:#c3121a; --ok:#59d98e;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg)}
+body{
+  font:17px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:max(24px,env(safe-area-inset-bottom,0px));
+  min-height:100%;
+  background:radial-gradient(120% 60% at 50% 0%,#2a0b0e 0%,var(--bg) 60%) var(--bg);
+}
+main{max-width:30rem;margin:0 auto;display:flex;flex-direction:column;gap:20px;padding-block:20px}
+.logo{width:min(70vw,260px);aspect-ratio:1;max-width:100%;margin:0 auto;border-radius:22%;
+  box-shadow:0 10px 50px rgba(255,42,42,.25);display:block}
+h1{font-size:1.6rem;margin:0;text-align:center;letter-spacing:.02em}
+.status{text-align:center;color:var(--muted);margin:0;min-height:1.5em}
+.status.live{color:var(--ok)}
+.now{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 16px;text-align:center}
+.now .label{font-size:.8rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.now .song{font-weight:600;overflow-wrap:anywhere}
+#play{
+  width:9.5rem;height:9.5rem;margin:4px auto;border-radius:50%;border:0;cursor:pointer;
+  background:radial-gradient(circle at 35% 30%,var(--red),var(--red-deep));color:#fff;
+  font:700 1.25rem/1.2 inherit;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;
+  box-shadow:0 0 0 6px rgba(255,42,42,.15),0 14px 40px rgba(195,18,26,.45);
+}
+#play svg{width:2.6rem;height:2.6rem;fill:#fff}
+#play:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid #fff;outline-offset:4px}
+.msg{background:#2a1015;border:2px solid var(--red);border-radius:14px;padding:14px 16px}
+.msg h2{margin:0 0 4px;font-size:1rem;color:#ffb3b3}
+.msg p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+section.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+section.box h2{margin:0;font-size:1.05rem}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.chip{flex:1 1 5.5rem;min-height:48px;border-radius:12px;border:1px solid var(--line);background:#221820;color:var(--fg);font:600 1rem inherit;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--red-deep);border-color:var(--red)}
+.wide{width:100%;min-height:52px;border-radius:12px;border:1px solid var(--line);background:#221820;color:var(--fg);font:600 1.05rem inherit;cursor:pointer}
+.note{color:var(--muted);font-size:.9rem;margin:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:no-preference){ #play.playing{animation:pulse 2.4s ease-in-out infinite} }
+@keyframes pulse{50%{box-shadow:0 0 0 14px rgba(255,42,42,.08),0 14px 40px rgba(195,18,26,.45)}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <img class="logo" src="icon-512.png" alt="Лого на Радио Интерхит">
+  <h1>Радио Интерхит</h1>
+
+  <button id="play" type="button" aria-pressed="false">
+    <svg id="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+    <span id="playText">Пусни</span>
+  </button>
+  <p id="status" class="status">Натиснете „Пусни“, за да слушате.</p>
+
+  <div class="now" id="nowBox" hidden>
+    <div class="label">Сега звучи</div>
+    <div class="song" id="song"></div>
+  </div>
+
+  <div class="msg" id="msgBox" hidden>
+    <h2>Съобщение от радиото</h2>
+    <p id="msgText"></p>
+  </div>
+
+  <section class="box" aria-labelledby="tTitle">
+    <h2 id="tTitle">Таймер за заспиване</h2>
+    <div class="row" role="group" aria-labelledby="tTitle">
+      <button class="chip" type="button" data-min="15" aria-pressed="false">15 минути</button>
+      <button class="chip" type="button" data-min="30" aria-pressed="false">30 минути</button>
+      <button class="chip" type="button" data-min="60" aria-pressed="false">60 минути</button>
+      <button class="chip" type="button" data-min="0" aria-pressed="true">Изключен</button>
+    </div>
+    <p class="note" id="timerInfo">Таймерът е изключен.</p>
+  </section>
+
+  <section class="box" aria-labelledby="nTitle" id="notifBox" hidden>
+    <h2 id="nTitle">Известия от радиото</h2>
+    <p class="note" id="notifInfo">Получавайте съобщенията на радиото като известие, дори когато не слушате.</p>
+    <button class="wide" id="notifBtn" type="button">Включи известията</button>
+  </section>
+
+  <section class="box" aria-labelledby="sTitle">
+    <h2 id="sTitle">Покани приятел</h2>
+    <button class="wide" id="share" type="button">Сподели приложението</button>
+    <p class="note" id="shareInfo" hidden></p>
+  </section>
+
+  <p class="note" style="text-align:center">Звукът се усилва и намалява с бутоните на телефона.</p>
+</main>
+
+<!-- Говорни съобщения за екранния четец -->
+<div id="say" class="sr" aria-live="polite"></div>
+<div id="sayLoud" class="sr" role="alert"></div>
+
+<audio id="audio" preload="none"></audio>
+
+<script>
+/* ================= НАСТРОЙКИ ================= */
+const STREAM_URL = "https://play.123castbg.eu:18425/stream";   // директният линк към потока
+const ONESIGNAL_APP_ID = "ae71f056-26a0-49ab-8b80-85bebfd8ff03";   // кодът на приложението от OneSignal (App ID)
+const SHOW_SONG  = true;   // false = никога да не се показва името на песента
+const MESSAGE_FILE = "saobshtenie.txt";       // файлът със съобщението до слушателите
+const MESSAGE_CHECK_SECONDS = 60;
+/* ============================================= */
+
+const $ = id => document.getElementById(id);
+const audio = $("audio"), playBtn = $("play");
+let wantPlaying = false, retry = 0, retryTimer = null, sleepTimer = null, sleepEnd = 0, sleepTick = null;
+
+function say(t){ $("say").textContent=""; setTimeout(()=>$("say").textContent=t,50); }
+function sayLoud(t){ $("sayLoud").textContent=""; setTimeout(()=>$("sayLoud").textContent=t,50); }
+function setStatus(t,live){ const s=$("status"); s.textContent=t; s.classList.toggle("live",!!live); }
+
+function setUi(playing){
+  playBtn.setAttribute("aria-pressed",playing?"true":"false");
+  $("playText").textContent = playing ? "Спри" : "Пусни";
+  playBtn.setAttribute("aria-label", playing ? "Спри радиото" : "Пусни радиото");
+  $("ico").innerHTML = playing ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>' : '<path d="M8 5v14l11-7z"/>';
+  playBtn.classList.toggle("playing",playing);
+  if("mediaSession" in navigator) navigator.mediaSession.playbackState = playing ? "playing" : "paused";
+}
+setUi(false);
+
+function start(){
+  wantPlaying = true;
+  if(!/^https:\/\//.test(STREAM_URL)){ setStatus("Липсва линк за слушане в настройките."); say("Липсва линк за слушане."); return; }
+  setStatus("Свързване…"); say("Свързване");
+  audio.src = STREAM_URL + (STREAM_URL.includes("?")?"&":"?") + "t=" + Date.now(); // винаги на живо, без забавяне
+  audio.play().catch(()=>{ setStatus("Не успях да пусна звука. Натиснете отново."); wantPlaying=false; setUi(false); });
+  setUi(true);
+}
+function stop(silent){
+  wantPlaying = false; clearTimeout(retryTimer); retry = 0;
+  audio.pause(); audio.removeAttribute("src"); audio.load();
+  setUi(false); setStatus("Спряно.");
+  if(!silent) say("Спряно");
+}
+playBtn.addEventListener("click", ()=> wantPlaying ? stop() : start());
+
+audio.addEventListener("playing", ()=>{ retry=0; setStatus("В ефир",true); say("Радиото свири"); });
+audio.addEventListener("waiting", ()=>{ if(wantPlaying) setStatus("Зареждане…"); });
+function reconnect(){
+  if(!wantPlaying) return;
+  retry++; const wait = Math.min(30, 2*retry);
+  setStatus("Връзката прекъсна. Нов опит след "+wait+" секунди…");
+  if(retry===1) say("Връзката прекъсна, свързвам се отново");
+  clearTimeout(retryTimer); retryTimer = setTimeout(start, wait*1000);
+}
+audio.addEventListener("error", reconnect);
+audio.addEventListener("stalled", ()=>{ setTimeout(()=>{ if(wantPlaying && audio.readyState<3) reconnect(); },8000); });
+audio.addEventListener("ended", reconnect);
+window.addEventListener("online", ()=>{ if(wantPlaying){ retry=0; start(); } });
+
+/* Бутони на заключения екран и в известията */
+if("mediaSession" in navigator){
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title:"Радио Интерхит", artist:"На живо",
+    artwork:[{src:"icon-192.png",sizes:"192x192",type:"image/png"},{src:"icon-512.png",sizes:"512x512",type:"image/png"}]
+  });
+  navigator.mediaSession.setActionHandler("play", start);
+  navigator.mediaSession.setActionHandler("pause", ()=>stop(true));
+  try{ navigator.mediaSession.setActionHandler("stop", ()=>stop(true)); }catch(e){}
+}
+
+/* Таймер за заспиване */
+document.querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed","false"));
+  b.setAttribute("aria-pressed","true");
+  clearTimeout(sleepTimer); clearInterval(sleepTick);
+  const m = +b.dataset.min;
+  if(!m){ $("timerInfo").textContent="Таймерът е изключен."; say("Таймерът е изключен"); return; }
+  sleepEnd = Date.now()+m*60000;
+  sleepTimer = setTimeout(()=>{
+    stop(true); setStatus("Радиото спря от таймера.");
+    document.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed", x.dataset.min==="0"?"true":"false"));
+    $("timerInfo").textContent="Таймерът е изключен."; clearInterval(sleepTick);
+  }, m*60000);
+  const upd=()=>{ const left=Math.max(0,Math.ceil((sleepEnd-Date.now())/60000)); $("timerInfo").textContent="Радиото ще спре след "+left+" мин."; };
+  upd(); sleepTick=setInterval(upd,30000);
+  say("Радиото ще спре след "+m+" минути");
+}));
+
+/* Споделяне */
+$("share").addEventListener("click", async ()=>{
+  const url = location.href.split("#")[0];
+  const info=$("shareInfo");
+  try{
+    if(navigator.share){ await navigator.share({title:"Радио Интерхит",text:"Слушай Радио Интерхит:",url}); return; }
+    await navigator.clipboard.writeText(url);
+    info.textContent="Линкът е копиран: "+url; info.hidden=false; say("Линкът е копиран");
+  }catch(e){
+    if(e && e.name==="AbortError") return;
+    info.textContent="Изпратете този линк: "+url; info.hidden=false;
+  }
+});
+
+/* Съобщения от радиото */
+let lastMsg = null;
+async function checkMessage(){
+  try{
+    const r = await fetch(MESSAGE_FILE+"?t="+Date.now(),{cache:"no-store"});
+    if(!r.ok) return;
+    const t = (await r.text()).trim();
+    if(t===lastMsg) return;
+    const first = lastMsg===null; lastMsg = t;
+    $("msgBox").hidden = !t; $("msgText").textContent = t;
+    if(t){
+      if(first) say("Съобщение от радиото: "+t); else { sayLoud("Ново съобщение от радиото: "+t); beep(); if(navigator.vibrate) navigator.vibrate(200); }
+    }
+  }catch(e){}
+}
+function beep(){
+  try{ const c=new (window.AudioContext||window.webkitAudioContext)(); const o=c.createOscillator(), g=c.createGain();
+    o.frequency.value=880; g.gain.value=0.08; o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+0.25);
+  }catch(e){}
+}
+checkMessage(); setInterval(checkMessage, MESSAGE_CHECK_SECONDS*1000);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) checkMessage(); });
+
+/* Име на песента: показва се само когато радиото го изпраща.
+   Ако изключиш заглавието от програмата за излъчване, полето изчезва само. */
+const BASE = STREAM_URL.replace(/\/[^\/]*$/,"");
+function showSong(title){
+  title=(title||"").trim();
+  if(!title || /^(unknown|-|n\/a)$/i.test(title)){ $("nowBox").hidden=true; $("song").textContent=""; resetMeta(); return; }
+  if(title===$("song").textContent && !$("nowBox").hidden) return;
+  $("song").textContent=title; $("nowBox").hidden=false;
+  if("mediaSession" in navigator && navigator.mediaSession.metadata) navigator.mediaSession.metadata.title=title;
+}
+function resetMeta(){ if("mediaSession" in navigator && navigator.mediaSession.metadata) navigator.mediaSession.metadata.title="Радио Интерхит"; }
+function jsonp(url){ return new Promise((ok,bad)=>{ const cb="cb"+Date.now(), sc=document.createElement("script");
+  window[cb]=d=>{ ok(d); delete window[cb]; sc.remove(); }; sc.onerror=()=>{ bad(); delete window[cb]; sc.remove(); };
+  sc.src=url+"&callback="+cb; document.head.appendChild(sc); setTimeout(()=>bad(),8000); }); }
+let metaMode=null; // "ice" или "shout"
+async function checkSong(){
+  if(!SHOW_SONG) return;
+  try{
+    if(metaMode!=="shout"){
+      try{
+        const r=await fetch(BASE+"/status-json.xsl?t="+Date.now(),{cache:"no-store"});
+        const j=await r.json(); metaMode="ice";
+        const list=[].concat((j.icestats&&j.icestats.source)||[]);
+        const src=list.find(x=>(x.listenurl||"").endsWith("/stream"))||list[0]||{};
+        showSong(src.title || ((src.artist?src.artist+" - ":"")+(src.title||"")));
+        return;
+      }catch(e){ if(metaMode==="ice") throw e; }
+    }
+    const d=await jsonp(BASE+"/stats?sid=1&json=1&t="+Date.now()); metaMode="shout";
+    showSong(d.songtitle);
+  }catch(e){}
+}
+checkSong(); setInterval(checkSong, 20000);
+
+/* Работа като приложение */
+const DIR = location.pathname.replace(/[^\/]*$/,"");   // напр. /radio/
+if(ONESIGNAL_APP_ID){
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  const sc=document.createElement("script"); sc.src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"; sc.defer=true; document.head.appendChild(sc);
+  OneSignalDeferred.push(async function(OneSignal){
+    await OneSignal.init({ appId: ONESIGNAL_APP_ID, serviceWorkerPath: DIR.slice(1)+"sw.js", serviceWorkerParam:{scope:DIR},
+                           notifyButton:{enable:false}, promptOptions:{slidedown:{prompts:[]}} });
+    const box=$("notifBox"), btn=$("notifBtn"), info=$("notifInfo");
+    const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent), standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
+    function refresh(){
+      if(!OneSignal.Notifications.isPushSupported()){
+        info.textContent = isIOS && !standalone
+          ? "На iPhone известията работят, след като добавите приложението на началния екран: бутон Сподели, после Добави към началния екран."
+          : "Този браузър не поддържа известия."; btn.hidden=true; return;
+      }
+      const on = OneSignal.Notifications.permission && OneSignal.User.PushSubscription.optedIn;
+      info.textContent = on ? "Известията са включени." : "Получавайте съобщенията на радиото като известие, дори когато не слушате.";
+      btn.textContent = on ? "Изключи известията" : "Включи известията";
+      btn.setAttribute("aria-pressed", on?"true":"false");
+      if(Notification.permission==="denied"){ info.textContent="Известията са забранени в настройките на браузъра. Разрешете ги оттам за този сайт."; }
+    }
+    btn.onclick=async ()=>{
+      try{
+        const on = OneSignal.Notifications.permission && OneSignal.User.PushSubscription.optedIn;
+        if(on){ await OneSignal.User.PushSubscription.optOut(); say("Известията са изключени"); }
+        else { await OneSignal.Notifications.requestPermission(); await OneSignal.User.PushSubscription.optIn(); if(OneSignal.Notifications.permission) say("Известията са включени"); }
+      }catch(e){}
+      refresh();
+    };
+    OneSignal.Notifications.addEventListener("permissionChange", refresh);
+    OneSignal.User.PushSubscription.addEventListener("change", refresh);
+    /* Известие, пристигнало докато приложението е отворено: показва се и се чете на глас */
+    OneSignal.Notifications.addEventListener("foregroundWillDisplay", e=>{
+      const n=e.notification, t=[n.title,n.body].filter(x=>x && x!=="Радио Интерхит").join(". ");
+      $("msgText").textContent=t; $("msgBox").hidden=false; sayLoud("Ново съобщение от радиото: "+t); beep();
+    });
+    box.hidden=false; refresh();
+  });
+} else if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+</script>
+</body>
+</html>
