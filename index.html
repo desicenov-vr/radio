@@ -62,6 +62,20 @@ section.box h2{margin:0;font-size:1.05rem}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (prefers-reduced-motion:no-preference){ #play.playing{animation:pulse 2.4s ease-in-out infinite} }
 @keyframes pulse{50%{box-shadow:0 0 0 14px rgba(255,42,42,.08),0 14px 40px rgba(195,18,26,.45)}}
+body.ob .logo{width:min(38vw,150px)}
+body.ob main{gap:14px}
+.onboard{background:linear-gradient(160deg,#3a0d12,#1c0b0f);border:2px solid var(--red);border-radius:18px;padding:18px 18px 14px;display:flex;flex-direction:column;gap:12px;box-shadow:0 10px 40px rgba(195,18,26,.3)}
+.onboard h2{margin:0;font-size:1.3rem;line-height:1.25}
+.onboard p{margin:0}
+.onboard ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;counter-reset:st}
+.onboard li{display:flex;gap:12px;align-items:center;counter-increment:st;font-size:1.02rem}
+.onboard li::before{content:counter(st);flex:0 0 2rem;height:2rem;border-radius:50%;background:var(--red-deep);display:grid;place-items:center;font-weight:700}
+.ico{display:inline-grid;place-items:center;width:1.9rem;height:1.9rem;border-radius:8px;background:#fff;color:#0a84ff;vertical-align:middle;margin:0 2px}
+.ico svg{width:1.2rem;height:1.2rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.big{width:100%;min-height:60px;border:0;border-radius:14px;background:#fff;color:#a10e15;font:800 1.15rem/1.2 inherit;cursor:pointer}
+.later{background:none;border:0;color:var(--muted);font:600 .95rem inherit;padding:6px;cursor:pointer;align-self:center;text-decoration:underline}
+@media (prefers-reduced-motion:no-preference){.onboard .big{animation:nudge 2.8s ease-in-out infinite}}
+@keyframes nudge{0%,80%,100%{transform:none}88%{transform:scale(1.03)}}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -69,6 +83,13 @@ section.box h2{margin:0;font-size:1.05rem}
 <main>
   <img class="logo" src="icon-512.png" alt="Лого на Радио Интерхит">
   <h1>Радио Интерхит</h1>
+
+  <section class="onboard" id="onboard" aria-labelledby="obTitle" hidden>
+    <h2 id="obTitle"></h2>
+    <div id="obBody"></div>
+    <button class="big" id="obAction" type="button" hidden></button>
+    <button class="later" id="obLater" type="button">Не сега</button>
+  </section>
 
   <button id="play" type="button" aria-pressed="false">
     <svg id="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
@@ -209,7 +230,7 @@ $("share").addEventListener("click", async ()=>{
   const url = location.href.split("#")[0];
   const info=$("shareInfo");
   try{
-    if(navigator.share){ await navigator.share({title:"Радио Интерхит",text:"Слушай Радио Интерхит:",url}); return; }
+    if(navigator.share){ await navigator.share({title:"Радио Интерхит",text:"Слушай Радио Интерхит! Отвори линка и следвай стъпката най-горе, за да го сложиш на телефона си:",url}); return; }
     await navigator.clipboard.writeText(url);
     info.textContent="Линкът е копиран: "+url; info.hidden=false; say("Линкът е копиран");
   }catch(e){
@@ -275,6 +296,78 @@ async function checkSong(){
 }
 checkSong(); setInterval(checkSong, 20000);
 
+
+/* ===== Карта "добре дошли": показва само следващата стъпка ===== */
+const UA = navigator.userAgent;
+const IS_IOS = /iPhone|iPad|iPod/.test(UA) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+const IS_ANDROID = /Android/i.test(UA);
+const IN_APP = /FBAN|FBAV|FB_IAB|Instagram|Messenger|Viber|Line\/|MicroMessenger|TikTok|; wv\)/i.test(UA);
+const IOS_OTHER = IS_IOS && /CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser/.test(UA);
+const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let installEvt = null, OS = null, justInstalled = false;
+const ICON_SHARE = '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></span>';
+const ICON_MORE  = '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></span>';
+const ICON_PLUS  = '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg></span>';
+const ICON_DOTS  = '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="19" r="1.3"/></svg></span>';
+
+function hiddenUntil(k){ try{ return +localStorage.getItem("ob_"+k)||0; }catch(e){ return 0; } }
+function hideFor(k,days){ try{ localStorage.setItem("ob_"+k, Date.now()+days*864e5); }catch(e){} }
+function notifOn(){ return !!(OS && OS.Notifications.permission && OS.User.PushSubscription.optedIn); }
+function notifPossible(){ return !!(OS && OS.Notifications.isPushSupported() && !notifOn() && (!("Notification" in window) || Notification.permission!=="denied")); }
+
+function pickCard(){
+  if(justInstalled) return {k:"done", t:"Готово, Интерхит е инсталиран!", b:"<p>Затворете тази страница и отваряйте радиото от иконката „Интерхит“ на началния екран.</p>", later:false};
+  if(!STANDALONE){
+    if(IN_APP) return {k:"inapp", t:"Отворете в браузъра", b: IS_IOS
+      ? "<p>Сега сте във Viber, Messenger или друго приложение. Оттук не може да се инсталира.</p><ol><li><span>Натиснете "+ICON_DOTS+" или "+ICON_SHARE+" горе или долу в екрана.</span></li><li>Изберете „Отвори в Safari“ (Open in Safari).</li></ol>"
+      : "<p>Сега сте във Viber, Messenger или друго приложение. Оттук не може да се инсталира.</p><ol><li><span>Натиснете "+ICON_DOTS+" горе вдясно.</span></li><li>Изберете „Отвори в Chrome“ или „Отвори в браузъра“.</li></ol>"};
+    if(installEvt) return {k:"install", t:"Инсталирайте Интерхит", b:"<p>Едно натискане и радиото е на началния ви екран, като истинско приложение.</p>", a:"Инсталирай приложението", fn:doInstall};
+    if(IOS_OTHER) return {k:"iosother", t:"Отворете в Safari", b:"<p>На iPhone приложението се добавя най-лесно от Safari. Копирайте адреса и го отворете в Safari.</p>", a:"Копирай адреса", fn:copyUrl};
+    if(IS_IOS) return {k:"ios", t:"Добавете Интерхит на началния екран", b:
+      "<ol><li><span>Натиснете "+ICON_MORE+" или "+ICON_SHARE+" в долната част на екрана.</span></li>"+
+      "<li><span>Изберете „Сподели“ "+ICON_SHARE+", после „Към начален екран“ "+ICON_PLUS+". Ако не го виждате, плъзнете списъка надолу.</span></li>"+
+      "<li>Натиснете „Добави“ горе вдясно.</li></ol>"};
+    if(IS_ANDROID) return {k:"android", t:"Инсталирайте Интерхит", b:
+      "<ol><li><span>Натиснете "+ICON_DOTS+" горе вдясно в Chrome.</span></li><li>Изберете „Инсталиране на приложението“ или „Добавяне към началния екран“.</li></ol>"};
+  }
+  if(notifPossible()) return {k:"notif", t:"Искате ли съобщения от радиото?", b:"<p>Ще ви известяваме, когато сме на живо, за специални предавания и новини.</p>", a:"Да, включи известията", fn:enableNotif};
+  return null;
+}
+function renderOnboard(){
+  let c = pickCard();
+  if(c && hiddenUntil(c.k) > Date.now()) c = null;
+  const box=$("onboard");
+  document.body.classList.toggle("ob", !!c);
+  if(!c){ box.hidden=true; return; }
+  const changed = box.dataset.k !== c.k; box.dataset.k = c.k;
+  $("obTitle").textContent=c.t; $("obBody").innerHTML=c.b;
+  const a=$("obAction"); a.hidden=!c.a; if(c.a){ a.textContent=c.a; a.onclick=c.fn; }
+  $("obLater").hidden = c.later===false;
+  $("obLater").onclick=()=>{ hideFor(c.k, c.k==="notif"?3:7); box.hidden=true; document.body.classList.remove("ob"); say("Скрито"); };
+  box.hidden=false;
+  if(changed && c.k!=="notif") say(c.t);
+}
+async function doInstall(){
+  if(!installEvt) return;
+  installEvt.prompt();
+  try{ const r = await installEvt.userChoice; if(r.outcome==="accepted"){ justInstalled=true; } }catch(e){}
+  installEvt=null; renderOnboard();
+}
+async function enableNotif(){
+  if(!OS) return;
+  try{ await OS.Notifications.requestPermission(); await OS.User.PushSubscription.optIn(); }catch(e){}
+  if(notifOn()){ say("Известията са включени. Благодарим!"); } 
+  renderOnboard();
+}
+async function copyUrl(){
+  const url=location.href.split("#")[0];
+  try{ await navigator.clipboard.writeText(url); say("Адресът е копиран. Отворете Safari и го поставете."); }
+  catch(e){ $("obBody").innerHTML += "<p>"+url+"</p>"; }
+}
+window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); installEvt=e; renderOnboard(); });
+window.addEventListener("appinstalled", ()=>{ justInstalled=true; installEvt=null; renderOnboard(); });
+renderOnboard();
+
 /* Работа като приложение */
 const DIR = location.pathname.replace(/[^\/]*$/,"");   // напр. /radio/
 if(ONESIGNAL_APP_ID){
@@ -283,8 +376,9 @@ if(ONESIGNAL_APP_ID){
   OneSignalDeferred.push(async function(OneSignal){
     await OneSignal.init({ appId: ONESIGNAL_APP_ID, serviceWorkerPath: DIR.slice(1)+"sw.js", serviceWorkerParam:{scope:DIR},
                            notifyButton:{enable:false}, promptOptions:{slidedown:{prompts:[]}} });
+    OS = OneSignal;
     const box=$("notifBox"), btn=$("notifBtn"), info=$("notifInfo");
-    const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent), standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
+    const isIOS=IS_IOS, standalone=STANDALONE;
     function refresh(){
       if(!OneSignal.Notifications.isPushSupported()){
         info.textContent = isIOS && !standalone
@@ -296,6 +390,7 @@ if(ONESIGNAL_APP_ID){
       btn.textContent = on ? "Изключи известията" : "Включи известията";
       btn.setAttribute("aria-pressed", on?"true":"false");
       if(Notification.permission==="denied"){ info.textContent="Известията са забранени в настройките на браузъра. Разрешете ги оттам за този сайт."; }
+      renderOnboard();
     }
     btn.onclick=async ()=>{
       try{
