@@ -318,9 +318,8 @@ function notifPossible(){ return !!(OS && OS.Notifications.isPushSupported() && 
 function pickCard(){
   if(justInstalled) return {k:"done", t:"Готово, Интерхит е инсталиран!", b:"<p>Затворете тази страница и отваряйте радиото от иконката „Интерхит“ на началния екран.</p>", later:false};
   if(!STANDALONE){
-    if(IN_APP) return {k:"inapp", t:"Отворете в браузъра", b: IS_IOS
-      ? "<p>Сега сте във Viber, Messenger или друго приложение. Оттук не може да се инсталира.</p><ol><li><span>Натиснете "+ICON_DOTS+" или "+ICON_SHARE+" горе или долу в екрана.</span></li><li>Изберете „Отвори в Safari“ (Open in Safari).</li></ol>"
-      : "<p>Сега сте във Viber, Messenger или друго приложение. Оттук не може да се инсталира.</p><ol><li><span>Натиснете "+ICON_DOTS+" горе вдясно.</span></li><li>Изберете „Отвори в Chrome“ или „Отвори в браузъра“.</li></ol>"};
+    if(IN_APP) return {k:"inapp", t:"Отворете Интерхит в браузъра", b: "<p>Едно натискане и продължавате в "+(IS_IOS?"Safari":"Chrome")+", откъдето радиото се слага на телефона.</p>",
+      a: IS_IOS ? "Отвори в Safari" : "Отвори в Chrome", fn: openExternal};
     if(installEvt) return {k:"install", t:"Инсталирайте Интерхит", b:"<p>Едно натискане и радиото е на началния ви екран, като истинско приложение.</p>", a:"Инсталирай приложението", fn:doInstall};
     if(IOS_OTHER) return {k:"iosother", t:"Отворете в Safari", b:"<p>На iPhone приложението се добавя най-лесно от Safari. Копирайте адреса и го отворете в Safari.</p>", a:"Копирай адреса", fn:copyUrl};
     if(IS_IOS) return {k:"ios", t:"Добавете Интерхит на началния екран", b:
@@ -358,6 +357,12 @@ async function enableNotif(){
   try{ await OS.Notifications.requestPermission(); await OS.User.PushSubscription.optIn(); }catch(e){}
   if(notifOn()){ say("Известията са включени. Благодарим!"); } 
   renderOnboard();
+}
+function openExternal(){
+  const url=location.href.split("#")[0], rest=url.replace(/^https?:\/\//,"");
+  if(IS_IOS){ location.href="x-safari-https://"+rest; }
+  else { location.href="intent://"+rest+"#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url="+encodeURIComponent(url)+";end"; }
+  setTimeout(()=>{ $("obBody").innerHTML="<p>Ако нищо не стана: натиснете трите точки горе вдясно и изберете „Отвори в "+(IS_IOS?"Safari":"браузъра")+"“.</p>"; say("Ако нищо не стана, натиснете трите точки горе вдясно и изберете Отвори в браузъра."); },2500);
 }
 async function copyUrl(){
   const url=location.href.split("#")[0];
