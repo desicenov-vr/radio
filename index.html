@@ -44,7 +44,7 @@ h1{font-size:1.6rem;margin:0;text-align:center;letter-spacing:.02em}
 #play{
   width:9.5rem;height:9.5rem;margin:4px auto;border-radius:50%;border:0;cursor:pointer;
   background:radial-gradient(circle at 35% 30%,var(--red),var(--red-deep));color:#fff;
-  font:700 1.25rem/1.2 inherit;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;
+  font-family:inherit;font-size:1.25rem;font-weight:700;line-height:1.2;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;
   box-shadow:0 0 0 6px rgba(255,42,42,.15),0 14px 40px rgba(195,18,26,.45);
 }
 #play svg{width:2.6rem;height:2.6rem;fill:#fff}
@@ -55,9 +55,9 @@ h1{font-size:1.6rem;margin:0;text-align:center;letter-spacing:.02em}
 section.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 section.box h2{margin:0;font-size:1.05rem}
 .row{display:flex;flex-wrap:wrap;gap:8px}
-.chip{flex:1 1 5.5rem;min-height:48px;border-radius:12px;border:1px solid var(--line);background:#221820;color:var(--fg);font:600 1rem inherit;cursor:pointer}
+.chip{flex:1 1 5.5rem;min-height:48px;border-radius:12px;border:1px solid var(--line);background:#221820;color:var(--fg);font-family:inherit;font-size:1rem;font-weight:600;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--red-deep);border-color:var(--red)}
-.wide{width:100%;min-height:52px;border-radius:12px;border:1px solid var(--line);background:#221820;color:var(--fg);font:600 1.05rem inherit;cursor:pointer}
+.wide{width:100%;min-height:52px;border-radius:12px;border:1px solid var(--line);background:#221820;color:var(--fg);font-family:inherit;font-size:1.05rem;font-weight:600;cursor:pointer}
 .note{color:var(--muted);font-size:.9rem;margin:0}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (prefers-reduced-motion:no-preference){ #play.playing{animation:pulse 2.4s ease-in-out infinite} }
@@ -72,10 +72,35 @@ body.ob main{gap:14px}
 .onboard li::before{content:counter(st);flex:0 0 2rem;height:2rem;border-radius:50%;background:var(--red-deep);display:grid;place-items:center;font-weight:700}
 .ico{display:inline-grid;place-items:center;width:1.9rem;height:1.9rem;border-radius:8px;background:#fff;color:#0a84ff;vertical-align:middle;margin:0 2px}
 .ico svg{width:1.2rem;height:1.2rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.big{width:100%;min-height:60px;border:0;border-radius:14px;background:#fff;color:#a10e15;font:800 1.15rem/1.2 inherit;cursor:pointer}
-.later{background:none;border:0;color:var(--muted);font:600 .95rem inherit;padding:6px;cursor:pointer;align-self:center;text-decoration:underline}
+.big{width:100%;min-height:60px;border:0;border-radius:14px;background:#fff;color:#a10e15;font-family:inherit;font-size:1.15rem;font-weight:800;line-height:1.2;cursor:pointer}
+.later{background:none;border:0;color:var(--muted);font-family:inherit;font-size:.95rem;font-weight:600;padding:6px;cursor:pointer;align-self:center;text-decoration:underline}
 @media (prefers-reduced-motion:no-preference){.onboard .big{animation:nudge 2.8s ease-in-out infinite}}
 @keyframes nudge{0%,80%,100%{transform:none}88%{transform:scale(1.03)}}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-weight:600}
+.field input,.field textarea{font:inherit;color:var(--fg);background:#221820;border:1px solid var(--line);border-radius:12px;padding:12px;width:100%}
+.field textarea{min-height:6.5rem;resize:vertical}
+.field input:focus,.field textarea:focus{outline:3px solid #fff;outline-offset:2px}
+.wide.on{background:var(--red-deep);border-color:var(--red);color:#fff}
+.wide[aria-disabled="true"]{background:#1a1416;color:#7d6d72;border-style:dashed;cursor:not-allowed}
+.send2{width:100%;min-height:52px;border:0;border-radius:12px;background:var(--red-deep);color:#fff;font-family:inherit;font-size:1.05rem;font-weight:700;cursor:pointer}
+.send2:disabled{opacity:.6}
+.kind{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin:0}
+.kind legend{font-weight:600;padding:0 6px}
+.kind label{display:flex;align-items:center;gap:10px;padding:8px 0}
+.kind input{width:1.3rem;height:1.3rem;accent-color:var(--red)}
+.paid{background:#2a1015;border:1px solid var(--red);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.paid h3{margin:0;font-size:1.05rem}
+.paid p{margin:0}
+.pay{display:flex;align-items:center;justify-content:center;min-height:52px;border-radius:12px;background:#fff;color:#111;font-weight:800;text-decoration:none;font-size:1.05rem}
+.pay:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.tag{display:inline-block;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--red-deep);color:#fff;border-radius:6px;padding:1px 6px;margin-left:6px}
+.mine{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.mine li{background:#221820;border:1px solid var(--line);border-radius:12px;padding:10px 12px;overflow-wrap:anywhere}
+.mine .who{font-size:.8rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.mine .rep{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.mine .rep .who{color:#ffb3b3}
+h3.small{margin:4px 0 0;font-size:1rem}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -124,6 +149,32 @@ body.ob main{gap:14px}
     <button class="wide" id="notifBtn" type="button">Включи известията</button>
   </section>
 
+  <section class="box" aria-labelledby="wTitle" id="writeBox" hidden>
+    <h2 id="wTitle">Пиши на радиото</h2>
+    <p class="note" id="wNote">Проверявам дали може да се пише…</p>
+    <button class="wide" id="wToggle" type="button" aria-expanded="false" aria-controls="wForm">Пиши ни</button>
+    <div id="wForm" hidden style="display:flex;flex-direction:column;gap:12px">
+      <fieldset class="kind"><legend>Какво искате да изпратите?</legend>
+        <label><input type="radio" name="wKind" value="msg" checked> Съобщение (безплатно)</label>
+        <label><input type="radio" name="wKind" value="song"> <span id="wSongLabel">Поздрав с песен</span></label>
+      </fieldset>
+      <div class="paid" id="wPaid" hidden>
+        <h3>Поздрав с песен: <span class="price"></span></h3>
+        <p>Зарадвайте любим човек с песен в ефир! Поздравите с песен са платена услуга.</p>
+        <p>1. Платете <span class="price"></span> през Revolut с бутона по-долу.<br>2. Върнете се тук и напишете поздрава: за кого е, от кого и коя песен желаете.</p>
+        <p>Попълнете името си така, както е при плащането, за да свържем поздрава с него. Поздравите се излъчват по реда на получаване, по време на предаването на живо.</p>
+        <a class="pay" id="wPay" target="_blank" rel="noopener">Плати с Revolut</a>
+      </div>
+      <div class="field"><label for="wName" id="wNameLabel">Твоето име (по желание)</label><input id="wName" maxlength="40" autocomplete="name"></div>
+      <div class="field"><label for="wText">Съобщение</label><textarea id="wText" maxlength="500"></textarea></div>
+      <button class="send2" id="wSend" type="button">Изпрати съобщението</button>
+    </div>
+    <div id="wMine" hidden>
+      <h3 class="small" id="wMineTitle">Твоите съобщения</h3>
+      <ul class="mine" id="wList" aria-labelledby="wMineTitle"></ul>
+    </div>
+  </section>
+
   <section class="box" aria-labelledby="sTitle">
     <h2 id="sTitle">Покани приятел</h2>
     <button class="wide" id="share" type="button">Сподели приложението</button>
@@ -137,7 +188,7 @@ body.ob main{gap:14px}
 <div id="say" class="sr" aria-live="polite"></div>
 <div id="sayLoud" class="sr" role="alert"></div>
 
-<audio id="audio" preload="none"></audio>
+<audio id="audio" preload="auto"></audio>
 
 <script>
 /* ================= НАСТРОЙКИ ================= */
@@ -146,6 +197,9 @@ const ONESIGNAL_APP_ID = "ae71f056-26a0-49ab-8b80-85bebfd8ff03";   // кодът
 const SHOW_SONG  = true;   // false = никога да не се показва името на песента
 const MESSAGE_FILE = "saobshtenie.txt";       // файлът със съобщението до слушателите
 const MESSAGE_CHECK_SECONDS = 60;
+const REVOLUT_URL = "https://revolut.me/desislgbc9";   // плащане за поздрав с песен
+const SONG_PRICE = "1 €";                               // цена на поздрав с песен
+const MAILBOX_URL = "https://script.google.com/macros/s/AKfycby465qxw-46jjWsKHPqp3wx65PV-N9erHtGQ3HbMLYLDxBrULHbD-MBqBMsz93XmQW-/exec";   // адресът на пощенската кутия (Google Apps Script)
 /* ============================================= */
 
 const $ = id => document.getElementById(id);
@@ -166,35 +220,43 @@ function setUi(playing){
 }
 setUi(false);
 
+let lastTime = 0, lastProgress = 0, announced = false;
 function start(){
   wantPlaying = true;
   if(!/^https:\/\//.test(STREAM_URL)){ setStatus("Липсва линк за слушане в настройките."); say("Липсва линк за слушане."); return; }
-  setStatus("Свързване…"); say("Свързване");
-  audio.src = STREAM_URL + (STREAM_URL.includes("?")?"&":"?") + "t=" + Date.now(); // винаги на живо, без забавяне
-  audio.play().catch(()=>{ setStatus("Не успях да пусна звука. Натиснете отново."); wantPlaying=false; setUi(false); });
+  setStatus("Свързване…"); if(!announced && retry===0) say("Свързване");
+  lastProgress = Date.now();
+  audio.src = STREAM_URL + (STREAM_URL.includes("?")?"&":"?") + "t=" + Date.now(); // винаги на живо
+  audio.play().catch(()=>{ if(retry===0){ setStatus("Не успях да пусна звука. Натиснете отново."); wantPlaying=false; setUi(false); } });
   setUi(true);
 }
 function stop(silent){
-  wantPlaying = false; clearTimeout(retryTimer); retry = 0;
+  wantPlaying = false; clearTimeout(retryTimer); retry = 0; announced = false;
   audio.pause(); audio.removeAttribute("src"); audio.load();
   setUi(false); setStatus("Спряно.");
   if(!silent) say("Спряно");
 }
 playBtn.addEventListener("click", ()=> wantPlaying ? stop() : start());
 
-audio.addEventListener("playing", ()=>{ retry=0; setStatus("В ефир",true); say("Радиото свири"); });
+audio.addEventListener("playing", ()=>{
+  retry=0; lastProgress=Date.now(); setStatus("В ефир",true);
+  if(!announced){ announced=true; say("Радиото свири"); }
+});
+/* Следим дали звукът реално върви. Кратките забавяния се оставят на браузъра,
+   рестартираме само ако звукът е спрял за повече от 20 секунди или има истинска грешка. */
+audio.addEventListener("timeupdate", ()=>{ if(audio.currentTime!==lastTime){ lastTime=audio.currentTime; lastProgress=Date.now(); } });
 audio.addEventListener("waiting", ()=>{ if(wantPlaying) setStatus("Зареждане…"); });
 function reconnect(){
   if(!wantPlaying) return;
-  retry++; const wait = Math.min(30, 2*retry);
-  setStatus("Връзката прекъсна. Нов опит след "+wait+" секунди…");
-  if(retry===1) say("Връзката прекъсна, свързвам се отново");
+  retry++; const wait = retry===1 ? 1 : Math.min(20, 3*retry);
+  setStatus("Връзката прекъсна. Свързвам се отново…");
+  if(retry===2) say("Връзката прекъсна, свързвам се отново");
   clearTimeout(retryTimer); retryTimer = setTimeout(start, wait*1000);
 }
-audio.addEventListener("error", reconnect);
-audio.addEventListener("stalled", ()=>{ setTimeout(()=>{ if(wantPlaying && audio.readyState<3) reconnect(); },8000); });
+audio.addEventListener("error", ()=>{ if(audio.getAttribute("src")) reconnect(); });
 audio.addEventListener("ended", reconnect);
-window.addEventListener("online", ()=>{ if(wantPlaying){ retry=0; start(); } });
+setInterval(()=>{ if(wantPlaying && !audio.paused && Date.now()-lastProgress > 20000) reconnect(); }, 5000);
+window.addEventListener("online", ()=>{ if(wantPlaying && Date.now()-lastProgress > 5000){ retry=0; start(); } });
 
 /* Бутони на заключения екран и в известията */
 if("mediaSession" in navigator){
@@ -372,6 +434,103 @@ async function copyUrl(){
 window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); installEvt=e; renderOnboard(); });
 window.addEventListener("appinstalled", ()=>{ justInstalled=true; installEvt=null; renderOnboard(); });
 renderOnboard();
+
+
+/* ===== Пиши на радиото ===== */
+const MB_ON = /^https:\/\//.test(MAILBOX_URL);
+let mbOpen = null, mbFormOpen = false;
+function store(k,v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v); }catch(e){ return null; } }
+function myId(){
+  let v = store("ih_id");
+  if(!v){ v = ((crypto.randomUUID && crypto.randomUUID()) || (Math.random().toString(36).slice(2)+Date.now().toString(36)+Math.random().toString(36).slice(2))).replace(/[^a-z0-9]/g,"").slice(0,32); store("ih_id",v); window._ihid=v; }
+  return v || window._ihid;
+}
+function mbGet(params){
+  const q = new URLSearchParams(params).toString();
+  return fetch(MAILBOX_URL + "?" + q, {cache:"no-store"}).then(r=>r.json());
+}
+function setMbOpen(open){
+  const was = mbOpen; mbOpen = !!open;
+  const t=$("wToggle"), note=$("wNote");
+  $("writeBox").hidden = false;
+  if(mbOpen){
+    t.removeAttribute("aria-disabled"); t.classList.add("on");
+    t.textContent = mbFormOpen ? "Скрий формата" : "Пиши ни";
+    note.textContent = "Сега сме в ефир и четем съобщенията ви. Пишете ни!";
+    if(was===false) say("Вече можете да пишете на радиото.");
+  } else {
+    t.setAttribute("aria-disabled","true"); t.classList.remove("on");
+    t.textContent = "Пиши ни";
+    note.textContent = "В момента не може да се пише. Съобщенията са отворени, докато водещият е в ефир.";
+    mbFormOpen = false; $("wForm").hidden = true; t.setAttribute("aria-expanded","false");
+    if(was===true) say("Съобщенията към радиото са затворени.");
+  }
+}
+function renderMine(items){
+  const list=$("wList"); list.innerHTML="";
+  $("wMine").hidden = !items.length;
+  let seen = +(store("ih_seen")||0), newest = seen, fresh = [];
+  items.forEach(m=>{
+    const li=document.createElement("li");
+    const a=document.createElement("div"); a.className="who"; a.textContent = m.kind==="song" ? "Вашият поздрав с песен" : "Вие написахте"; li.appendChild(a);
+    const p=document.createElement("div"); p.textContent=m.text; li.appendChild(p);
+    const r=document.createElement("div"); r.className="rep";
+    const rw=document.createElement("div"); rw.className="who";
+    const rt=document.createElement("div");
+    if(m.reply){ rw.textContent="Отговор от радиото"; rt.textContent=m.reply; if(m.rt>seen) fresh.push(m.reply); if(m.rt>newest) newest=m.rt; }
+    else { rw.textContent="Очаква отговор"; }
+    r.appendChild(rw); if(m.reply) r.appendChild(rt); li.appendChild(r);
+    list.appendChild(li);
+  });
+  if(fresh.length){ store("ih_seen", String(newest)); sayLoud("Отговор от радиото: " + fresh.join(". ")); beep(); if(navigator.vibrate) navigator.vibrate(200); }
+}
+async function mbPoll(){
+  if(!MB_ON) return;
+  try{
+    if(store("ih_sent")){ const d = await mbGet({action:"replies", id:myId()}); setMbOpen(d.open); renderMine(d.items||[]); }
+    else { const d = await mbGet({action:"status"}); setMbOpen(d.open); }
+  }catch(e){}
+}
+function wKind(){ const r=document.querySelector("input[name=wKind]:checked"); return r ? r.value : "msg"; }
+function updKind(){
+  const song = wKind()==="song";
+  $("wPaid").hidden = !song;
+  $("wNameLabel").textContent = song ? "Твоето име (както при плащането)" : "Твоето име (по желание)";
+  $("wText").placeholder = song ? "Напр.: Поздрав за мама Мария от Иван, песен …" : "";
+  $("wSend").textContent = song ? "Изпрати поздрава" : "Изпрати съобщението";
+}
+if(MB_ON){
+  document.querySelectorAll(".price").forEach(x=>x.textContent=SONG_PRICE);
+  $("wPay").href = REVOLUT_URL; $("wPay").textContent = "Плати " + SONG_PRICE + " с Revolut";
+  $("wSongLabel").textContent = "Поздрав с песен (" + SONG_PRICE + ")";
+  document.querySelectorAll("input[name=wKind]").forEach(r=>r.addEventListener("change", updKind));
+  try{ $("wName").value = store("ih_name") || ""; }catch(e){}
+  $("wToggle").addEventListener("click", ()=>{
+    if(!mbOpen){ say("В момента не може да се пише. Опитайте, когато сме в ефир."); return; }
+    mbFormOpen = !mbFormOpen; $("wForm").hidden = !mbFormOpen;
+    $("wToggle").setAttribute("aria-expanded", mbFormOpen?"true":"false");
+    $("wToggle").textContent = mbFormOpen ? "Скрий формата" : "Пиши ни";
+    if(mbFormOpen) $("wText").focus();
+  });
+  $("wSend").addEventListener("click", async ()=>{ const label=$("wSend").textContent;
+    const text=$("wText").value.trim(), name=$("wName").value.trim();
+    const kind = wKind();
+    if(!text){ say("Напишете съобщение."); $("wText").focus(); return; }
+    if(kind==="song" && !name){ say("Напишете името си, както е при плащането."); $("wName").focus(); return; }
+    const b=$("wSend"); b.disabled=true; b.textContent="Изпращам…";
+    try{
+      const sub = (OS && OS.User && OS.User.PushSubscription && OS.User.PushSubscription.id) || "";
+      const d = await mbGet({action:"send", id:myId(), name, text, sub, kind});
+      if(d.ok){ $("wText").value=""; store("ih_sent","1"); store("ih_name",name); say(kind==="song" ? "Поздравът е изпратен. Благодарим!" : "Съобщението е изпратено. Отговорът ще се появи тук."); mbPoll(); }
+      else if(d.error==="closed"){ setMbOpen(false); say("В момента не може да се пише."); }
+      else if(d.error==="too_fast"){ say("Изчакайте малко преди следващото съобщение."); }
+      else { say("Не успях да изпратя. Опитайте пак."); }
+    }catch(e){ say("Няма връзка. Опитайте пак."); }
+    b.disabled=false; b.textContent=label;
+  });
+  mbPoll(); setInterval(mbPoll, 30000);
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) mbPoll(); });
+}
 
 /* Работа като приложение */
 const DIR = location.pathname.replace(/[^\/]*$/,"");   // напр. /radio/
