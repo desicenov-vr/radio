@@ -48,6 +48,16 @@ h1{font-size:1.6rem;margin:0;text-align:center;letter-spacing:.02em}
   box-shadow:0 0 0 6px rgba(255,42,42,.15),0 14px 40px rgba(195,18,26,.45);
 }
 #play svg{width:2.6rem;height:2.6rem;fill:#fff}
+/* Анимации: само "леки" свойства (размер и прозрачност), които телефонът рисува почти без усилие.
+   Спират сами, ако в телефона е включено "Намаляване на движението". */
+#play{position:relative}
+#play::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:3px solid rgba(255,42,42,.55);opacity:0;pointer-events:none}
+@media (prefers-reduced-motion:no-preference){
+  #play.playing::after{animation:ring 2.4s ease-out infinite;will-change:transform,opacity}
+  .onboard .big{animation:nudge 3s ease-in-out infinite;will-change:transform}
+}
+@keyframes ring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.18);opacity:0}}
+@keyframes nudge{0%,80%,100%{transform:none}88%{transform:scale(1.03)}}
 #play:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid #fff;outline-offset:4px}
 .msg{background:#2a1015;border:2px solid var(--red);border-radius:14px;padding:14px 16px}
 .msg h2{margin:0 0 4px;font-size:1rem;color:#ffb3b3}
@@ -100,6 +110,20 @@ body.ob main{gap:14px}
 .mine .rep{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
 .mine .rep .who{color:#ffb3b3}
 h3.small{margin:4px 0 0;font-size:1rem}
+.airline{text-align:center;margin:0;font-weight:700;font-size:1.05rem}
+.chat{display:flex;flex-direction:column;gap:10px}
+.chatrow{display:flex;gap:8px;align-items:center}
+.chatrow input{flex:1;min-width:0;font:inherit;color:var(--fg);background:#221820;border:1px solid var(--line);border-radius:999px;padding:12px 16px}
+.chatrow input:focus{outline:3px solid #fff;outline-offset:2px}
+.sendbtn{flex:0 0 52px;width:52px;height:52px;border-radius:50%;border:0;background:var(--red-deep);display:grid;place-items:center;cursor:pointer}
+.sendbtn svg{width:24px;height:24px;fill:#fff}
+.sendbtn[aria-disabled="true"]{background:#2a2023;cursor:not-allowed}
+.sendbtn[aria-disabled="true"] svg{fill:#7d6d72}
+.sendbtn:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.linkbtn{background:none;border:0;color:#ffb3b3;text-decoration:underline;font:inherit;padding:0 4px;cursor:pointer}
+#wCount{text-align:right;font-variant-numeric:tabular-nums}
+.support{text-align:center}
+.note a{color:#ffb3b3}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -119,6 +143,7 @@ h3.small{margin:4px 0 0;font-size:1rem}
     <svg id="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
     <span id="playText">Пусни</span>
   </button>
+  <p id="airLine" class="airline" hidden></p>
   <p id="status" class="status">Натиснете „Пусни“, за да слушате.</p>
 
   <div class="now" id="nowBox" hidden>
@@ -149,27 +174,23 @@ h3.small{margin:4px 0 0;font-size:1rem}
   </section>
 
   <section class="box" aria-labelledby="wTitle" id="writeBox" hidden>
-    <h2 id="wTitle">Пиши на радиото</h2>
-    <p class="note" id="wNote">Проверявам дали може да се пише…</p>
-    <button class="wide" id="wToggle" type="button" aria-expanded="false" aria-controls="wForm">Пиши ни</button>
-    <div id="wForm" hidden style="display:flex;flex-direction:column;gap:12px">
-      <fieldset class="kind"><legend>Какво искате да изпратите?</legend>
-        <label><input type="radio" name="wKind" value="msg" checked> Съобщение (безплатно)</label>
-        <label><input type="radio" name="wKind" value="song"> <span id="wSongLabel">Поздрав с песен</span></label>
-      </fieldset>
-      <div class="paid" id="wPaid" hidden>
-        <h3>Поздрав с песен: <span class="price"></span></h3>
-        <p>Зарадвайте любим човек с песен в ефир! Поздравите с песен са платена услуга.</p>
-        <p>1. Платете <span class="price"></span> през Revolut с бутона по-долу.<br>2. Върнете се тук и напишете поздрава: за кого е, от кого и коя песен желаете.</p>
-        <p>Попълнете името си така, както е при плащането, за да свържем поздрава с него. Поздравите се излъчват по реда на получаване, по време на предаването на живо.</p>
-        <a class="pay" id="wPay" target="_blank" rel="noopener">Плати с Revolut</a>
+    <h2 id="wTitle">Пиши ни</h2>
+    <p class="note airtxt" id="wNote">Проверявам…</p>
+    <button class="wide" id="wToggle" type="button" aria-expanded="false" aria-controls="wForm">Напиши поздрав</button>
+    <div id="wForm" hidden class="chat">
+      <div id="wNameRow" class="field"><label for="wName">Твоето име</label><input id="wName" maxlength="40" autocomplete="given-name" enterkeyhint="next"></div>
+      <p class="note" id="wAs" hidden><span id="wAsText"></span> <button type="button" class="linkbtn" id="wAsChange">Смени</button></p>
+      <div class="chatrow">
+        <label for="wText" class="sr">Поздрав</label>
+        <input id="wText" maxlength="150" autocomplete="off" enterkeyhint="send" placeholder="Напиши поздрав…">
+        <button id="wSend" type="button" class="sendbtn" aria-label="Изпрати"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20.5 21 12 3 3.5l.01 6.6L15 12 3.01 13.9z"/></svg></button>
       </div>
-      <div class="field"><label for="wName" id="wNameLabel">Твоето име (по желание)</label><input id="wName" maxlength="40" autocomplete="name"></div>
-      <div class="field"><label for="wText">Съобщение</label><textarea id="wText" maxlength="500"></textarea></div>
-      <button class="send2" id="wSend" type="button">Изпрати съобщението</button>
+      <p class="note" id="wCount" aria-hidden="true">0 / 150</p>
+      <p class="note" id="wWait" hidden></p>
     </div>
+    <p class="note" id="wTip" hidden>Ако смяташ, че се справяме добре и искаш да ни подкрепиш, можеш да го направиш <a id="wTipLink" href="#" target="_blank" rel="noopener">тук</a>.</p>
     <div id="wMine" hidden>
-      <h3 class="small" id="wMineTitle">Твоите съобщения</h3>
+      <h3 class="small" id="wMineTitle">Твоите поздрави</h3>
       <ul class="mine" id="wList" aria-labelledby="wMineTitle"></ul>
     </div>
   </section>
@@ -178,6 +199,7 @@ h3.small{margin:4px 0 0;font-size:1rem}
     <h2 id="sTitle">Покани приятел</h2>
     <button class="wide" id="share" type="button">Сподели приложението</button>
     <p class="note" id="shareInfo" hidden></p>
+    <p class="note support"><a id="supportLink" href="#" target="_blank" rel="noopener" hidden>Подкрепи радиото</a></p>
   </section>
 
   <p class="note" style="text-align:center">Звукът се усилва и намалява с бутоните на телефона.</p>
@@ -196,12 +218,12 @@ const ONESIGNAL_APP_ID = "ae71f056-26a0-49ab-8b80-85bebfd8ff03";   // кодът
 const SHOW_SONG  = true;   // false = никога да не се показва името на песента
 const MESSAGE_FILE = "saobshtenie.txt";       // файлът със съобщението до слушателите
 const MESSAGE_CHECK_SECONDS = 60;
-const REVOLUT_URL = "https://revolut.me/desislgbc9";   // плащане за поздрав с песен
-const SONG_PRICE = "1 €";                               // цена на поздрав с песен
 const MAILBOX_URL = "https://script.google.com/macros/s/AKfycby465qxw-46jjWsKHPqp3wx65PV-N9erHtGQ3HbMLYLDxBrULHbD-MBqBMsz93XmQW-/exec";   // адресът на пощенската кутия (Google Apps Script)
 /* ============================================= */
 
 const $ = id => document.getElementById(id);
+/* Поддържа ли телефонът известия (дефинирано най-отгоре, за да е готово навсякъде) */
+const PUSH_OK = ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
 const audio = $("audio"), playBtn = $("play");
 let wantPlaying = false, retry = 0, retryTimer = null, sleepTimer = null, sleepEnd = 0, sleepTick = null;
 
@@ -326,7 +348,7 @@ function stop(silent){ pauseRadio(silent); }
 playBtn.addEventListener("click", ()=> wantPlaying ? pauseRadio() : start());
 
 audio.addEventListener("playing", ()=>{
-  starting = false; retry = 0; lastCTAt = Date.now(); setStatus("В ефир",true);
+  starting = false; retry = 0; lastCTAt = Date.now(); setStatus("Свири",true);
   if(!announced){ announced=true; say("Радиото свири"); }
 });
 audio.addEventListener("waiting", ()=>{
@@ -477,18 +499,18 @@ function hiddenUntil(k){ try{ return +localStorage.getItem("ob_"+k)||0; }catch(e
 function hideFor(k,days){ try{ localStorage.setItem("ob_"+k, Date.now()+days*864e5); }catch(e){} }
 
 function pickCard(){
-  if(justInstalled) return {k:"done", t:"Готово, Интерхит е инсталиран!", b:"<p>Затворете тази страница и отваряйте радиото от иконката „Интерхит“ на началния екран.</p>", later:false};
+  if(justInstalled) return {k:"done", t:"Радио Интерхит вече е на началния ви екран.", b:"<p>Отваряйте ни от иконката „Интерхит“, когато пожелаете. Благодарим, че сте с нас!</p>", later:false};
   if(!STANDALONE){
     if(IN_APP) return {k:"inapp", t:"Отворете Интерхит в браузъра", b: "<p>Едно натискане и продължавате в "+(IS_IOS?"Safari":"Chrome")+", откъдето радиото се слага на телефона.</p>",
       a: IS_IOS ? "Отвори в Safari" : "Отвори в Chrome", fn: openExternal};
-    if(installEvt) return {k:"install", t:"Инсталирайте Интерхит", b:"<p>Едно натискане и радиото е на началния ви екран, като истинско приложение.</p>", a:"Инсталирай приложението", fn:doInstall};
+    if(installEvt) return {k:"install", t:"Инсталирайте Радио Интерхит", b:"<p>Нека Интерхит бъде винаги с вас.</p>", a:"Инсталирай", fn:doInstall};
     if(IOS_OTHER) return {k:"iosother", t:"Отворете в Safari", b:"<p>На iPhone приложението се добавя най-лесно от Safari. Копирайте адреса и го отворете в Safari.</p>", a:"Копирай адреса", fn:copyUrl};
-    if(IS_IOS) return {k:"ios", t:"Добавете Интерхит на началния екран", b:
-      "<ol><li><span>Натиснете "+ICON_MORE+" или "+ICON_SHARE+" в долната част на екрана.</span></li>"+
+    if(IS_IOS) return {k:"ios", t:"Инсталирайте Радио Интерхит", b:
+      "<p>Нека Интерхит бъде винаги с вас.</p><ol><li><span>Натиснете "+ICON_MORE+" или "+ICON_SHARE+" в долната част на екрана.</span></li>"+
       "<li><span>Изберете „Сподели“ "+ICON_SHARE+", после „Към начален екран“ "+ICON_PLUS+". Ако не го виждате, плъзнете списъка надолу.</span></li>"+
       "<li>Натиснете „Добави“ горе вдясно.</li></ol>"};
-    if(IS_ANDROID) return {k:"android", t:"Инсталирайте Интерхит", b:
-      "<ol><li><span>Натиснете "+ICON_DOTS+" горе вдясно в Chrome.</span></li><li>Изберете „Инсталиране на приложението“ или „Добавяне към началния екран“.</li></ol>"};
+    if(IS_ANDROID) return {k:"android", t:"Инсталирайте Радио Интерхит", b:
+      "<p>Нека Интерхит бъде винаги с вас.</p><ol><li><span>Натиснете "+ICON_DOTS+" горе вдясно в Chrome.</span></li><li>Изберете „Инсталиране на приложението“ (на някои телефони пише „Добавяне към началния екран“).</li></ol>"};
   }
   if(notifPossible()) return {k:"notif", t:"Искате ли съобщения от радиото?", b:"<p>Ще ви известяваме, когато сме на живо, за специални предавания и новини.</p>", a:"Да, включи известията", fn:enableNotif};
   return null;
@@ -543,23 +565,33 @@ function mbGet(params){
   const q = new URLSearchParams(params).toString();
   return fetch(MAILBOX_URL + "?" + q, {cache:"no-store"}).then(r=>r.json());
 }
+let airHost = null;
+function setAirInfo(d){
+  const host = d.host || "";
+  if(airHost===host) return; airHost = host;
+  const txt = host ? "В ефир: " + host : "В момента няма никой в ефир.";
+  setText($("airLine"), txt); setHid($("airLine"), false);
+  setText($("wNote"), txt);
+  if("mediaSession" in navigator && navigator.mediaSession.metadata){ try{ navigator.mediaSession.metadata.artist = host ? "с " + host : "Радио Интерхит"; }catch(e){} }
+}
 function setMbOpen(open){
   const was = mbOpen; mbOpen = !!open;
   if(was===mbOpen) return;
-  const t=$("wToggle"), note=$("wNote");
+  const t=$("wToggle");
   setHid($("writeBox"),false);
   if(mbOpen){
     t.removeAttribute("aria-disabled"); t.classList.add("on");
-    t.textContent = mbFormOpen ? "Скрий формата" : "Пиши ни";
-    note.textContent = "Сега сме в ефир и четем съобщенията ви. Пишете ни!";
-    if(was===false) say("Вече можете да пишете на радиото.");
+    t.textContent = mbFormOpen ? "Скрий" : "Напиши поздрав";
   } else {
     t.setAttribute("aria-disabled","true"); t.classList.remove("on");
-    t.textContent = "Пиши ни";
-    note.textContent = "В момента не може да се пише. Съобщенията са отворени, докато водещият е в ефир.";
+    t.textContent = "Напиши поздрав";
     mbFormOpen = false; $("wForm").hidden = true; t.setAttribute("aria-expanded","false");
-    if(was===true) say("Съобщенията към радиото са затворени.");
   }
+}
+function applyState(d){
+  setAirInfo(d); setMbOpen(d.open);
+  const sl=$("supportLink");
+  if(d.radio){ if(sl.getAttribute("href")!==d.radio) sl.href=d.radio; setHid(sl,false); } else setHid(sl,true);
 }
 let mineSig="";
 function renderMine(items){
@@ -570,13 +602,13 @@ function renderMine(items){
   let seen = +(store("ih_seen")||0), newest = seen, fresh = [];
   items.forEach(m=>{
     const li=document.createElement("li");
-    const a=document.createElement("div"); a.className="who"; a.textContent = m.kind==="song" ? "Вашият поздрав с песен" : "Вие написахте"; li.appendChild(a);
+    const a=document.createElement("div"); a.className="who"; a.textContent = "Твоят поздрав"; li.appendChild(a);
     const p=document.createElement("div"); p.textContent=m.text; li.appendChild(p);
     const r=document.createElement("div"); r.className="rep";
     const rw=document.createElement("div"); rw.className="who";
     const rt=document.createElement("div");
     if(m.reply){ rw.textContent="Отговор от радиото"; rt.textContent=m.reply; if(m.rt>seen) fresh.push(m.reply); if(m.rt>newest) newest=m.rt; }
-    else { rw.textContent="Очаква отговор"; }
+    else { rw.textContent="Очаква се"; }
     r.appendChild(rw); if(m.reply) r.appendChild(rt); li.appendChild(r);
     list.appendChild(li);
   });
@@ -585,70 +617,82 @@ function renderMine(items){
 async function mbPoll(){
   if(!MB_ON || document.hidden) return;
   try{
-    if(store("ih_sent")){ const d = await mbGet({action:"replies", id:myId()}); setMbOpen(d.open); renderMine(d.items||[]); }
-    else { const d = await mbGet({action:"status"}); setMbOpen(d.open); }
+    if(store("ih_sent")){ const d = await mbGet({action:"replies", id:myId()}); applyState(d); renderMine(d.items||[]); }
+    else { const d = await mbGet({action:"status"}); applyState(d); }
   }catch(e){}
 }
-function wKind(){ const r=document.querySelector("input[name=wKind]:checked"); return r ? r.value : "msg"; }
-function updKind(){
-  const song = wKind()==="song";
-  $("wPaid").hidden = !song;
-  $("wNameLabel").textContent = song ? "Твоето име (както при плащането)" : "Твоето име (по желание)";
-  $("wText").placeholder = song ? "Напр.: Поздрав за мама Мария от Иван, песен …" : "";
-  if(!$("wSend").classList.contains("waiting")) $("wSend").textContent = song ? "Изпрати поздрава" : "Изпрати съобщението";
-}
 if(MB_ON){
-  document.querySelectorAll(".price").forEach(x=>x.textContent=SONG_PRICE);
-  $("wPay").href = REVOLUT_URL; $("wPay").textContent = "Плати " + SONG_PRICE + " с Revolut";
-  $("wSongLabel").textContent = "Поздрав с песен (" + SONG_PRICE + ")";
-  document.querySelectorAll("input[name=wKind]").forEach(r=>r.addEventListener("change", updKind));
-  try{ $("wName").value = store("ih_name") || ""; }catch(e){}
+  const MAXC = 150;
+  /* име: пита се само първия път */
+  function showName(){
+    const n = store("ih_name") || "";
+    const has = !!n;
+    setHid($("wNameRow"), has); setHid($("wAs"), !has);
+    if(has) setText($("wAsText"), "Пишете като " + n + ".");
+    $("wName").value = n;
+  }
+  showName();
+  $("wAsChange").addEventListener("click", ()=>{ setHid($("wNameRow"), false); setHid($("wAs"), true); $("wName").focus(); $("wName").select(); });
+  $("wName").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("wText").focus(); } });
   $("wToggle").addEventListener("click", ()=>{
-    if(!mbOpen){ say("В момента не може да се пише. Опитайте, когато сме в ефир."); return; }
+    if(!mbOpen){ say("В момента няма никой в ефир."); return; }
     mbFormOpen = !mbFormOpen; $("wForm").hidden = !mbFormOpen;
     $("wToggle").setAttribute("aria-expanded", mbFormOpen?"true":"false");
-    $("wToggle").textContent = mbFormOpen ? "Скрий формата" : "Пиши ни";
-    if(mbFormOpen) $("wText").focus();
+    $("wToggle").textContent = mbFormOpen ? "Скрий" : "Напиши поздрав";
+    if(mbFormOpen){ (store("ih_name") ? $("wText") : $("wName")).focus(); }
   });
-  /* Ограничение: едно съобщение на 10 минути. Бутонът показва колко остава. */
+  /* брояч на знаците: вижда се винаги, а четецът казва само близо до края */
+  let lastWarn = null;
+  $("wText").addEventListener("input", ()=>{
+    const left = MAXC - $("wText").value.length;
+    setText($("wCount"), $("wText").value.length + " / " + MAXC);
+    const step = left<=0 ? 0 : left<=5 ? 5 : left<=10 ? 10 : left<=20 ? 20 : null;
+    if(step!==null && step!==lastWarn){ lastWarn=step; say(left<=0 ? "Достигнахте края, 150 знака." : "Остават " + left + " знака."); }
+    if(step===null) lastWarn=null;
+  });
+  $("wText").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("wSend").click(); } });
+
+  /* пауза между поздравите */
   let waitTimer = null;
   function minsLeft(){ return Math.ceil(Math.max(0, (+(store("ih_next")||0)) - Date.now()) / 60000); }
   function updWait(){
-    const b=$("wSend"), m=minsLeft();
+    const b=$("wSend"), m=minsLeft(), w=$("wWait");
     if(m>0){
-      setAttr(b,"aria-disabled","true"); b.classList.add("waiting");
-      setText(b, "Може да пишете отново след " + m + " " + (m===1?"минута":"минути"));
+      setAttr(b,"aria-disabled","true"); setAttr(b,"aria-label","Изпрати, ще е възможно след " + m + " " + (m===1?"минута":"минути"));
+      setText(w, "Ще можете да пратите следващ поздрав след " + m + " " + (m===1?"минута":"минути") + "."); setHid(w,false);
     } else {
-      setAttr(b,"aria-disabled",null); b.classList.remove("waiting");
-      setText(b, wKind()==="song" ? "Изпрати поздрава" : "Изпрати съобщението");
+      setAttr(b,"aria-disabled",null); setAttr(b,"aria-label","Изпрати"); setHid(w,true);
       clearInterval(waitTimer); waitTimer=null;
     }
   }
   function startWait(sec){ store("ih_next", String(Date.now()+sec*1000)); updWait(); clearInterval(waitTimer); waitTimer=setInterval(updWait, 15000); }
   if(minsLeft()>0){ updWait(); waitTimer=setInterval(updWait, 15000); }
-  document.querySelectorAll("input[name=wKind]").forEach(r=>r.addEventListener("change", updWait));
 
+  let sending = false;
   $("wSend").addEventListener("click", async ()=>{
+    if(sending) return;
     const m=minsLeft();
-    if(m>0){ say("Може да пишете отново след " + m + " " + (m===1?"минута":"минути") + ". Така всеки слушател има шанс."); return; }
+    if(m>0){ say("Ще можете да пратите следващ поздрав след " + m + " " + (m===1?"минута":"минути") + "."); return; }
     const text=$("wText").value.trim(), name=$("wName").value.trim();
-    const kind = wKind();
-    if(!text){ say("Напишете съобщение."); $("wText").focus(); return; }
-    if(kind==="song" && !name){ say("Напишете името си, както е при плащането."); $("wName").focus(); return; }
-    const b=$("wSend"); b.disabled=true; b.textContent="Изпращам…";
+    if(!text){ say("Напишете поздрав."); $("wText").focus(); return; }
+    sending = true;
     try{
       const sub = (OS && OS.User && OS.User.PushSubscription && OS.User.PushSubscription.id) || "";
-      const d = await mbGet({action:"send", id:myId(), name, text, sub, kind});
+      const d = await mbGet({action:"send", id:myId(), name, text, sub});
       if(d.ok){
-        $("wText").value=""; store("ih_sent","1"); store("ih_name",name);
-        say((kind==="song" ? "Поздравът е изпратен. Благодарим!" : "Съобщението е изпратено. Отговорът ще се появи тук.") + " Следващото може след 10 минути.");
-        startWait(d.wait || 600); mbPoll();
+        $("wText").value=""; setText($("wCount"), "0 / " + MAXC); lastWarn=null;
+        store("ih_sent","1"); if(name){ store("ih_name",name); showName(); }
+        say("Поздравът е изпратен. Благодарим!");
+        startWait(d.wait || 600); mbPoll(); $("wText").focus();
+        /* тихата линия за подкрепа: най-много веднъж на ден, без да се чете на глас */
+        const today = new Date().toDateString();
+        if(d.tip && store("ih_tipday")!==today){ $("wTipLink").href=d.tip; setHid($("wTip"),false); store("ih_tipday",today); }
       }
-      else if(d.error==="closed"){ setMbOpen(false); say("В момента не може да се пише."); }
-      else if(d.error==="too_fast"){ startWait(d.wait || 600); const mm=minsLeft(); say("Може да пишете отново след " + mm + " " + (mm===1?"минута":"минути") + "."); }
+      else if(d.error==="closed"){ setMbOpen(false); say("В момента няма никой в ефир."); }
+      else if(d.error==="too_fast"){ startWait(d.wait || 600); const mm=minsLeft(); say("Ще можете да пратите следващ поздрав след " + mm + " " + (mm===1?"минута":"минути") + "."); }
       else { say("Не успях да изпратя. Опитайте пак."); }
     }catch(e){ say("Няма връзка. Опитайте пак."); }
-    b.disabled=false; updWait();
+    sending = false;
   });
   mbPoll(); setInterval(mbPoll, 30000);
   document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) mbPoll(); });
@@ -658,7 +702,6 @@ if(MB_ON){
 const DIR = location.pathname.replace(/[^\/]*$/,"");   // напр. /radio/
 /* ===== Известия: програмата на OneSignal се зарежда САМО при нужда =====
    (ако човекът вече ги е включил или натисне "Включи известията"). Така приложението е по-леко за всички. */
-const PUSH_OK = ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
 let osLoading = null;
 function loadOS(){
   if(osLoading) return osLoading;
@@ -694,7 +737,7 @@ function refreshNotif(){
   setHid(box,false);
   if(!PUSH_OK || (OS && !OS.Notifications.isPushSupported())){
     setText(info, IS_IOS && !STANDALONE
-      ? "На iPhone известията работят, след като добавите приложението на началния екран: бутон Сподели, после Добави към началния екран."
+      ? "На iPhone известията работят, след като инсталирате приложението: бутон Сподели, после „Към начален екран“."
       : "Този браузър не поддържа известия."); setHid(btn,true); renderOnboard(); return;
   }
   const on = notifOn();
