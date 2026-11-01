@@ -85,6 +85,7 @@ body.ob main{gap:14px}
 .wide[aria-disabled="true"]{background:#1a1416;color:#7d6d72;border-style:dashed;cursor:not-allowed}
 .send2{width:100%;min-height:52px;border:0;border-radius:12px;background:var(--red-deep);color:#fff;font-family:inherit;font-size:1.05rem;font-weight:700;cursor:pointer}
 .send2:disabled{opacity:.6}
+.send2.waiting{background:#1a1416;color:#a99aa0;border:1px dashed var(--line);cursor:not-allowed;font-weight:600}
 .kind{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin:0}
 .kind legend{font-weight:600;padding:0 6px}
 .kind label{display:flex;align-items:center;gap:10px;padding:8px 0}
@@ -220,43 +221,135 @@ function setUi(playing){
 }
 setUi(false);
 
-let lastTime = 0, lastProgress = 0, announced = false;
+function store(k,v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v); }catch(e){ return null; } }
+/* ===== Пускане на радиото =====
+   Основен начин: приложението само тегли потока и държи ~5 секунди звук в запас (като TuneIn и VLC),
+   за да не засича при кратко забавяне на интернета. Ако браузърът или сървърът не го позволят,
+   минава автоматично на обикновено пускане. */
+const BUFFER_START = 5, BUFFER_RESUME = 3, MAX_AHEAD = 25;
+let announced = false, starting = false, lastCT = -1, lastCTAt = 0, pausedAt = 0;
+let mse = null;   // текущото теглене: {ms, sb, ctrl, queue, done}
+let useMSE = !!(window.MediaSource && MediaSource.isTypeSupported && MediaSource.isTypeSupported("audio/mpeg"));
+
+function liveUrl(){ return STREAM_URL + (STREAM_URL.includes("?")?"&":"?") + "t=" + Date.now(); }
+function ahead(){ try{ const b=audio.buffered; return b.length ? b.end(b.length-1) - audio.currentTime : 0; }catch(e){ return 0; } }
+function endMSE(){
+  if(!mse) return;
+  try{ mse.ctrl.abort(); }catch(e){}
+  mse.done = true; mse = null;
+}
+
+function startMSE(){
+  endMSE();
+  const ms = new MediaSource(), ctrl = new AbortController();
+  const m = { ms, sb:null, ctrl, queue:[], done:false, gotData:false };
+  mse = m;
+  audio.src = URL.createObjectURL(ms);
+  ms.addEventListener("sourceopen", async ()=>{
+    if(m.done) return;
+    try{ m.sb = ms.addSourceBuffer("audio/mpeg"); m.sb.mode = "sequence"; }catch(e){ fallbackPlain(); return; }
+    m.sb.addEventListener("updateend", ()=>pump(m));
+    let res;
+    try{ res = await fetch(liveUrl(), { signal: ctrl.signal, cache: "no-store" }); }
+    catch(e){ if(m.done) return; if(!m.gotData){ fallbackPlain(); } else reconnect(); return; }
+    if(!res.ok || !res.body){ if(!m.gotData) fallbackPlain(); else reconnect(); return; }
+    const reader = res.body.getReader();
+    try{
+      for(;;){
+        const r = await reader.read();
+        if(m.done) return;
+        if(r.done) break;
+        m.gotData = true; m.queue.push(r.value); pump(m);
+      }
+      if(!m.done) reconnect();          // сървърът затвори връзката
+    }catch(e){ if(!m.done) reconnect(); }
+  }, { once:true });
+}
+function pump(m){
+  if(m.done || !m.sb || m.sb.updating) return;
+  /* чистим стария звук, за да не расте паметта */
+  try{ const b=m.sb.buffered; if(b.length && audio.currentTime - b.start(0) > 40){ m.sb.remove(b.start(0), audio.currentTime - 20); return; } }catch(e){}
+  if(m.queue.length){
+    let len=0; m.queue.forEach(c=>len+=c.length);
+    const data=new Uint8Array(len); let o=0; m.queue.forEach(c=>{ data.set(c,o); o+=c.length; }); m.queue=[];
+    try{ m.sb.appendBuffer(data); }catch(e){ if(e.name==="QuotaExceededError"){ m.queue.unshift(data); } else reconnect(); }
+  }
+  /* тръгваме, щом има достатъчно запас */
+  if(wantPlaying && audio.paused && ahead() >= (starting ? BUFFER_START : BUFFER_RESUME)){
+    const p = audio.play(); if(p && p.catch) p.catch(()=>{});
+  }
+  /* след засечка в интернета възстановяваме запаса незабележимо: свирим с 3% по-бавно, докато се натрупа */
+  if(!audio.paused){
+    const a = ahead();
+    try{ audio.preservesPitch = true; }catch(e){}
+    if(a < BUFFER_RESUME && audio.playbackRate !== 0.97) audio.playbackRate = 0.97;
+    else if(a >= BUFFER_START + 1 && a <= 10 && audio.playbackRate !== 1) audio.playbackRate = 1;
+    else if(a > 10 && audio.playbackRate !== 1.03) audio.playbackRate = 1.03;
+  }
+  /* ако сме изостанали много от живото излъчване, скачаме напред */
+  if(!audio.paused && ahead() > MAX_AHEAD){ try{ audio.currentTime = audio.buffered.end(audio.buffered.length-1) - BUFFER_START; }catch(e){} }
+}
+function fallbackPlain(){
+  useMSE = false; endMSE();   // само до затваряне на приложението; следващия път пробва пак
+  if(wantPlaying) start();
+}
+
 function start(){
-  wantPlaying = true;
+  wantPlaying = true; starting = true; pausedAt = 0;
   if(!/^https:\/\//.test(STREAM_URL)){ setStatus("Липсва линк за слушане в настройките."); say("Липсва линк за слушане."); return; }
   setStatus("Свързване…"); if(!announced && retry===0) say("Свързване");
-  lastProgress = Date.now();
-  audio.src = STREAM_URL + (STREAM_URL.includes("?")?"&":"?") + "t=" + Date.now(); // винаги на живо
-  audio.play().catch(()=>{ if(retry===0){ setStatus("Не успях да пусна звука. Натиснете отново."); wantPlaying=false; setUi(false); } });
+  lastCT = -1; lastCTAt = Date.now();
   setUi(true);
+  if(useMSE){ startMSE(); }
+  else {
+    endMSE();
+    audio.src = liveUrl();
+    audio.play().catch(()=>{ if(retry===0 && !audio.src){ setStatus("Не успях да пусна звука. Натиснете отново."); wantPlaying=false; setUi(false); } });
+  }
 }
-function stop(silent){
-  wantPlaying = false; clearTimeout(retryTimer); retry = 0; announced = false;
-  audio.pause(); audio.removeAttribute("src"); audio.load();
+/* Пауза: спира звука, но оставя плейъра "жив", за да работят бутоните на заключения екран
+   и жестът с два пръста на TalkBack. */
+function pauseRadio(silent){
+  wantPlaying = false; starting = false; clearTimeout(retryTimer); retry = 0; announced = false;
+  endMSE(); audio.pause(); pausedAt = Date.now();
   setUi(false); setStatus("Спряно.");
   if(!silent) say("Спряно");
 }
-playBtn.addEventListener("click", ()=> wantPlaying ? stop() : start());
+function stop(silent){ pauseRadio(silent); }
+playBtn.addEventListener("click", ()=> wantPlaying ? pauseRadio() : start());
 
 audio.addEventListener("playing", ()=>{
-  retry=0; lastProgress=Date.now(); setStatus("В ефир",true);
+  starting = false; retry = 0; lastCTAt = Date.now(); setStatus("В ефир",true);
   if(!announced){ announced=true; say("Радиото свири"); }
 });
-/* Следим дали звукът реално върви. Кратките забавяния се оставят на браузъра,
-   рестартираме само ако звукът е спрял за повече от 20 секунди или има истинска грешка. */
-audio.addEventListener("timeupdate", ()=>{ if(audio.currentTime!==lastTime){ lastTime=audio.currentTime; lastProgress=Date.now(); } });
-audio.addEventListener("waiting", ()=>{ if(wantPlaying) setStatus("Зареждане…"); });
+audio.addEventListener("waiting", ()=>{
+  if(!wantPlaying) return;
+  setStatus("Зареждане…");
+  /* при изчерпан запас изчакваме да се натрупа отново, вместо да засича на парчета */
+  if(mse && ahead() < 0.5){ audio.pause(); }
+});
+/* Ако телефонът спре звука сам (обаждане, извадени слушалки), отразяваме го */
+audio.addEventListener("pause", ()=>{
+  if(wantPlaying && !starting && !mse && audio.readyState >= 3){ wantPlaying=false; setUi(false); setStatus("Спряно."); }
+});
 function reconnect(){
   if(!wantPlaying) return;
   retry++; const wait = retry===1 ? 1 : Math.min(20, 3*retry);
   setStatus("Връзката прекъсна. Свързвам се отново…");
   if(retry===2) say("Връзката прекъсна, свързвам се отново");
+  endMSE();
   clearTimeout(retryTimer); retryTimer = setTimeout(start, wait*1000);
 }
-audio.addEventListener("error", ()=>{ if(audio.getAttribute("src")) reconnect(); });
-audio.addEventListener("ended", reconnect);
-setInterval(()=>{ if(wantPlaying && !audio.paused && Date.now()-lastProgress > 20000) reconnect(); }, 5000);
-window.addEventListener("online", ()=>{ if(wantPlaying && Date.now()-lastProgress > 5000){ retry=0; start(); } });
+audio.addEventListener("error", ()=>{ if(wantPlaying && !mse) reconnect(); });
+audio.addEventListener("ended", ()=>{ if(!mse) reconnect(); });
+/* Пазач: гледа направо часовника на плейъра. Рестартира само ако звукът стои на едно място над 25 секунди. */
+setInterval(()=>{
+  if(!wantPlaying){ if(pausedAt && Date.now()-pausedAt > 10*60000 && audio.getAttribute("src")){ audio.removeAttribute("src"); audio.load(); pausedAt=0; } return; }
+  const ct = audio.currentTime;
+  if(ct !== lastCT){ lastCT = ct; lastCTAt = Date.now(); return; }
+  if(Date.now() - lastCTAt > 25000) reconnect();
+}, 5000);
+window.addEventListener("online", ()=>{ if(wantPlaying && Date.now()-lastCTAt > 8000){ retry=0; start(); } });
 
 /* Бутони на заключения екран и в известията */
 if("mediaSession" in navigator){
@@ -264,9 +357,9 @@ if("mediaSession" in navigator){
     title:"Радио Интерхит", artist:"На живо",
     artwork:[{src:"icon-192.png",sizes:"192x192",type:"image/png"},{src:"icon-512.png",sizes:"512x512",type:"image/png"}]
   });
-  navigator.mediaSession.setActionHandler("play", start);
-  navigator.mediaSession.setActionHandler("pause", ()=>stop(true));
-  try{ navigator.mediaSession.setActionHandler("stop", ()=>stop(true)); }catch(e){}
+  navigator.mediaSession.setActionHandler("play", ()=>{ if(!wantPlaying) start(); });
+  navigator.mediaSession.setActionHandler("pause", ()=>pauseRadio(true));
+  try{ navigator.mediaSession.setActionHandler("stop", ()=>pauseRadio(true)); }catch(e){}
 }
 
 /* Таймер за заспиване */
@@ -439,7 +532,6 @@ renderOnboard();
 /* ===== Пиши на радиото ===== */
 const MB_ON = /^https:\/\//.test(MAILBOX_URL);
 let mbOpen = null, mbFormOpen = false;
-function store(k,v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v); }catch(e){ return null; } }
 function myId(){
   let v = store("ih_id");
   if(!v){ v = ((crypto.randomUUID && crypto.randomUUID()) || (Math.random().toString(36).slice(2)+Date.now().toString(36)+Math.random().toString(36).slice(2))).replace(/[^a-z0-9]/g,"").slice(0,32); store("ih_id",v); window._ihid=v; }
@@ -497,7 +589,7 @@ function updKind(){
   $("wPaid").hidden = !song;
   $("wNameLabel").textContent = song ? "Твоето име (както при плащането)" : "Твоето име (по желание)";
   $("wText").placeholder = song ? "Напр.: Поздрав за мама Мария от Иван, песен …" : "";
-  $("wSend").textContent = song ? "Изпрати поздрава" : "Изпрати съобщението";
+  if(!$("wSend").classList.contains("waiting")) $("wSend").textContent = song ? "Изпрати поздрава" : "Изпрати съобщението";
 }
 if(MB_ON){
   document.querySelectorAll(".price").forEach(x=>x.textContent=SONG_PRICE);
@@ -512,7 +604,27 @@ if(MB_ON){
     $("wToggle").textContent = mbFormOpen ? "Скрий формата" : "Пиши ни";
     if(mbFormOpen) $("wText").focus();
   });
-  $("wSend").addEventListener("click", async ()=>{ const label=$("wSend").textContent;
+  /* Ограничение: едно съобщение на 10 минути. Бутонът показва колко остава. */
+  let waitTimer = null;
+  function minsLeft(){ return Math.ceil(Math.max(0, (+(store("ih_next")||0)) - Date.now()) / 60000); }
+  function updWait(){
+    const b=$("wSend"), m=minsLeft();
+    if(m>0){
+      b.setAttribute("aria-disabled","true"); b.classList.add("waiting");
+      b.textContent = "Може да пишете отново след " + m + " " + (m===1?"минута":"минути");
+    } else {
+      b.removeAttribute("aria-disabled"); b.classList.remove("waiting");
+      b.textContent = wKind()==="song" ? "Изпрати поздрава" : "Изпрати съобщението";
+      clearInterval(waitTimer); waitTimer=null;
+    }
+  }
+  function startWait(sec){ store("ih_next", String(Date.now()+sec*1000)); updWait(); clearInterval(waitTimer); waitTimer=setInterval(updWait, 15000); }
+  if(minsLeft()>0){ updWait(); waitTimer=setInterval(updWait, 15000); }
+  document.querySelectorAll("input[name=wKind]").forEach(r=>r.addEventListener("change", updWait));
+
+  $("wSend").addEventListener("click", async ()=>{
+    const m=minsLeft();
+    if(m>0){ say("Може да пишете отново след " + m + " " + (m===1?"минута":"минути") + ". Така всеки слушател има шанс."); return; }
     const text=$("wText").value.trim(), name=$("wName").value.trim();
     const kind = wKind();
     if(!text){ say("Напишете съобщение."); $("wText").focus(); return; }
@@ -521,12 +633,16 @@ if(MB_ON){
     try{
       const sub = (OS && OS.User && OS.User.PushSubscription && OS.User.PushSubscription.id) || "";
       const d = await mbGet({action:"send", id:myId(), name, text, sub, kind});
-      if(d.ok){ $("wText").value=""; store("ih_sent","1"); store("ih_name",name); say(kind==="song" ? "Поздравът е изпратен. Благодарим!" : "Съобщението е изпратено. Отговорът ще се появи тук."); mbPoll(); }
+      if(d.ok){
+        $("wText").value=""; store("ih_sent","1"); store("ih_name",name);
+        say((kind==="song" ? "Поздравът е изпратен. Благодарим!" : "Съобщението е изпратено. Отговорът ще се появи тук.") + " Следващото може след 10 минути.");
+        startWait(d.wait || 600); mbPoll();
+      }
       else if(d.error==="closed"){ setMbOpen(false); say("В момента не може да се пише."); }
-      else if(d.error==="too_fast"){ say("Изчакайте малко преди следващото съобщение."); }
+      else if(d.error==="too_fast"){ startWait(d.wait || 600); const mm=minsLeft(); say("Може да пишете отново след " + mm + " " + (mm===1?"минута":"минути") + "."); }
       else { say("Не успях да изпратя. Опитайте пак."); }
     }catch(e){ say("Няма връзка. Опитайте пак."); }
-    b.disabled=false; b.textContent=label;
+    b.disabled=false; updWait();
   });
   mbPoll(); setInterval(mbPoll, 30000);
   document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) mbPoll(); });
