@@ -60,7 +60,6 @@ section.box h2{margin:0;font-size:1.05rem}
 .wide{width:100%;min-height:52px;border-radius:12px;border:1px solid var(--line);background:#221820;color:var(--fg);font-family:inherit;font-size:1.05rem;font-weight:600;cursor:pointer}
 .note{color:var(--muted);font-size:.9rem;margin:0}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-@media (prefers-reduced-motion:no-preference){ #play.playing{animation:pulse 2.4s ease-in-out infinite} }
 @keyframes pulse{50%{box-shadow:0 0 0 14px rgba(255,42,42,.08),0 14px 40px rgba(195,18,26,.45)}}
 body.ob .logo{width:min(38vw,150px)}
 body.ob main{gap:14px}
@@ -74,7 +73,6 @@ body.ob main{gap:14px}
 .ico svg{width:1.2rem;height:1.2rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .big{width:100%;min-height:60px;border:0;border-radius:14px;background:#fff;color:#a10e15;font-family:inherit;font-size:1.15rem;font-weight:800;line-height:1.2;cursor:pointer}
 .later{background:none;border:0;color:var(--muted);font-family:inherit;font-size:.95rem;font-weight:600;padding:6px;cursor:pointer;align-self:center;text-decoration:underline}
-@media (prefers-reduced-motion:no-preference){.onboard .big{animation:nudge 2.8s ease-in-out infinite}}
 @keyframes nudge{0%,80%,100%{transform:none}88%{transform:scale(1.03)}}
 .field{display:flex;flex-direction:column;gap:6px}
 .field label{font-weight:600}
@@ -209,9 +207,15 @@ let wantPlaying = false, retry = 0, retryTimer = null, sleepTimer = null, sleepE
 
 function say(t){ $("say").textContent=""; setTimeout(()=>$("say").textContent=t,50); }
 function sayLoud(t){ $("sayLoud").textContent=""; setTimeout(()=>$("sayLoud").textContent=t,50); }
-function setStatus(t,live){ const s=$("status"); s.textContent=t; s.classList.toggle("live",!!live); }
+/* Променяме екрана САМО ако има реална разлика: иначе VoiceOver на iPhone преглежда страницата наново и засича. */
+function setText(el,t){ if(el && el.textContent!==t) el.textContent=t; }
+function setHid(el,h){ if(el && el.hidden!==!!h) el.hidden=!!h; }
+function setAttr(el,k,v){ if(!el) return; if(v===null){ if(el.hasAttribute(k)) el.removeAttribute(k); } else if(el.getAttribute(k)!==v) el.setAttribute(k,v); }
+function setStatus(t,live){ const s=$("status"); setText(s,t); if(s.classList.contains("live")!==!!live) s.classList.toggle("live",!!live); }
 
+let uiState=null;
 function setUi(playing){
+  if(uiState===!!playing) return; uiState=!!playing;
   playBtn.setAttribute("aria-pressed",playing?"true":"false");
   $("playText").textContent = playing ? "Спри" : "Пусни";
   playBtn.setAttribute("aria-label", playing ? "Спри радиото" : "Пусни радиото");
@@ -375,7 +379,7 @@ document.querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{
     document.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed", x.dataset.min==="0"?"true":"false"));
     $("timerInfo").textContent="Таймерът е изключен."; clearInterval(sleepTick);
   }, m*60000);
-  const upd=()=>{ const left=Math.max(0,Math.ceil((sleepEnd-Date.now())/60000)); $("timerInfo").textContent="Радиото ще спре след "+left+" мин."; };
+  const upd=()=>{ const left=Math.max(0,Math.ceil((sleepEnd-Date.now())/60000)); setText($("timerInfo"),"Радиото ще спре след "+left+" мин."); };
   upd(); sleepTick=setInterval(upd,30000);
   say("Радиото ще спре след "+m+" минути");
 }));
@@ -397,6 +401,7 @@ $("share").addEventListener("click", async ()=>{
 /* Съобщения от радиото */
 let lastMsg = null;
 async function checkMessage(){
+  if(document.hidden) return;
   try{
     const r = await fetch(MESSAGE_FILE+"?t="+Date.now(),{cache:"no-store"});
     if(!r.ok) return;
@@ -422,7 +427,7 @@ document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) checkMe
 const BASE = STREAM_URL.replace(/\/[^\/]*$/,"");
 function showSong(title){
   title=(title||"").trim();
-  if(!title || /^(unknown|-|n\/a)$/i.test(title)){ $("nowBox").hidden=true; $("song").textContent=""; resetMeta(); return; }
+  if(!title || /^(unknown|-|n\/a)$/i.test(title)){ if(!$("nowBox").hidden || $("song").textContent){ setHid($("nowBox"),true); setText($("song"),""); resetMeta(); } return; }
   if(title===$("song").textContent && !$("nowBox").hidden) return;
   $("song").textContent=title; $("nowBox").hidden=false;
   if("mediaSession" in navigator && navigator.mediaSession.metadata) navigator.mediaSession.metadata.title=title;
@@ -431,9 +436,9 @@ function resetMeta(){ if("mediaSession" in navigator && navigator.mediaSession.m
 function jsonp(url){ return new Promise((ok,bad)=>{ const cb="cb"+Date.now(), sc=document.createElement("script");
   window[cb]=d=>{ ok(d); delete window[cb]; sc.remove(); }; sc.onerror=()=>{ bad(); delete window[cb]; sc.remove(); };
   sc.src=url+"&callback="+cb; document.head.appendChild(sc); setTimeout(()=>bad(),8000); }); }
-let metaMode=null; // "ice" или "shout"
+let metaMode=null, songFails=0; // "ice" или "shout"
 async function checkSong(){
-  if(!SHOW_SONG) return;
+  if(!SHOW_SONG || songFails>=3 || (document.hidden && !wantPlaying)) return;   // сървърът не дава име на песента: спираме да питаме
   try{
     if(metaMode!=="shout"){
       try{
@@ -441,13 +446,13 @@ async function checkSong(){
         const j=await r.json(); metaMode="ice";
         const list=[].concat((j.icestats&&j.icestats.source)||[]);
         const src=list.find(x=>(x.listenurl||"").endsWith("/stream"))||list[0]||{};
-        showSong(src.title || ((src.artist?src.artist+" - ":"")+(src.title||"")));
+        showSong(src.title || ((src.artist?src.artist+" - ":"")+(src.title||""))); songFails=0;
         return;
       }catch(e){ if(metaMode==="ice") throw e; }
     }
     const d=await jsonp(BASE+"/stats?sid=1&json=1&t="+Date.now()); metaMode="shout";
-    showSong(d.songtitle);
-  }catch(e){}
+    showSong(d.songtitle); songFails=0;
+  }catch(e){ if(metaMode===null) songFails++; }
 }
 checkSong(); setInterval(checkSong, 20000);
 
@@ -467,8 +472,6 @@ const ICON_DOTS  = '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24
 
 function hiddenUntil(k){ try{ return +localStorage.getItem("ob_"+k)||0; }catch(e){ return 0; } }
 function hideFor(k,days){ try{ localStorage.setItem("ob_"+k, Date.now()+days*864e5); }catch(e){} }
-function notifOn(){ return !!(OS && OS.Notifications.permission && OS.User.PushSubscription.optedIn); }
-function notifPossible(){ return !!(OS && OS.Notifications.isPushSupported() && !notifOn() && (!("Notification" in window) || Notification.permission!=="denied")); }
 
 function pickCard(){
   if(justInstalled) return {k:"done", t:"Готово, Интерхит е инсталиран!", b:"<p>Затворете тази страница и отваряйте радиото от иконката „Интерхит“ на началния екран.</p>", later:false};
@@ -493,8 +496,10 @@ function renderOnboard(){
   const box=$("onboard");
   document.body.classList.toggle("ob", !!c);
   if(!c){ box.hidden=true; return; }
-  const changed = box.dataset.k !== c.k; box.dataset.k = c.k;
-  $("obTitle").textContent=c.t; $("obBody").innerHTML=c.b;
+  const changed = box.dataset.k !== c.k || box.hidden;
+  if(!changed && box.dataset.b === c.b) return;
+  box.dataset.k = c.k; box.dataset.b = c.b;
+  setText($("obTitle"),c.t); $("obBody").innerHTML=c.b;
   const a=$("obAction"); a.hidden=!c.a; if(c.a){ a.textContent=c.a; a.onclick=c.fn; }
   $("obLater").hidden = c.later===false;
   $("obLater").onclick=()=>{ hideFor(c.k, c.k==="notif"?3:7); box.hidden=true; document.body.classList.remove("ob"); say("Скрито"); };
@@ -506,12 +511,6 @@ async function doInstall(){
   installEvt.prompt();
   try{ const r = await installEvt.userChoice; if(r.outcome==="accepted"){ justInstalled=true; } }catch(e){}
   installEvt=null; renderOnboard();
-}
-async function enableNotif(){
-  if(!OS) return;
-  try{ await OS.Notifications.requestPermission(); await OS.User.PushSubscription.optIn(); }catch(e){}
-  if(notifOn()){ say("Известията са включени. Благодарим!"); } 
-  renderOnboard();
 }
 function openExternal(){
   const url=location.href.split("#")[0], rest=url.replace(/^https?:\/\//,"");
@@ -543,8 +542,9 @@ function mbGet(params){
 }
 function setMbOpen(open){
   const was = mbOpen; mbOpen = !!open;
+  if(was===mbOpen) return;
   const t=$("wToggle"), note=$("wNote");
-  $("writeBox").hidden = false;
+  setHid($("writeBox"),false);
   if(mbOpen){
     t.removeAttribute("aria-disabled"); t.classList.add("on");
     t.textContent = mbFormOpen ? "Скрий формата" : "Пиши ни";
@@ -558,9 +558,12 @@ function setMbOpen(open){
     if(was===true) say("Съобщенията към радиото са затворени.");
   }
 }
+let mineSig="";
 function renderMine(items){
+  const sig=JSON.stringify(items.map(m=>[m.key,m.reply||""]));
+  if(sig===mineSig) return; mineSig=sig;
   const list=$("wList"); list.innerHTML="";
-  $("wMine").hidden = !items.length;
+  setHid($("wMine"), !items.length);
   let seen = +(store("ih_seen")||0), newest = seen, fresh = [];
   items.forEach(m=>{
     const li=document.createElement("li");
@@ -577,7 +580,7 @@ function renderMine(items){
   if(fresh.length){ store("ih_seen", String(newest)); sayLoud("Отговор от радиото: " + fresh.join(". ")); beep(); if(navigator.vibrate) navigator.vibrate(200); }
 }
 async function mbPoll(){
-  if(!MB_ON) return;
+  if(!MB_ON || document.hidden) return;
   try{
     if(store("ih_sent")){ const d = await mbGet({action:"replies", id:myId()}); setMbOpen(d.open); renderMine(d.items||[]); }
     else { const d = await mbGet({action:"status"}); setMbOpen(d.open); }
@@ -610,11 +613,11 @@ if(MB_ON){
   function updWait(){
     const b=$("wSend"), m=minsLeft();
     if(m>0){
-      b.setAttribute("aria-disabled","true"); b.classList.add("waiting");
-      b.textContent = "Може да пишете отново след " + m + " " + (m===1?"минута":"минути");
+      setAttr(b,"aria-disabled","true"); b.classList.add("waiting");
+      setText(b, "Може да пишете отново след " + m + " " + (m===1?"минута":"минути"));
     } else {
-      b.removeAttribute("aria-disabled"); b.classList.remove("waiting");
-      b.textContent = wKind()==="song" ? "Изпрати поздрава" : "Изпрати съобщението";
+      setAttr(b,"aria-disabled",null); b.classList.remove("waiting");
+      setText(b, wKind()==="song" ? "Изпрати поздрава" : "Изпрати съобщението");
       clearInterval(waitTimer); waitTimer=null;
     }
   }
@@ -650,45 +653,78 @@ if(MB_ON){
 
 /* Работа като приложение */
 const DIR = location.pathname.replace(/[^\/]*$/,"");   // напр. /radio/
-if(ONESIGNAL_APP_ID){
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-  const sc=document.createElement("script"); sc.src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"; sc.defer=true; document.head.appendChild(sc);
-  OneSignalDeferred.push(async function(OneSignal){
-    await OneSignal.init({ appId: ONESIGNAL_APP_ID, serviceWorkerPath: DIR.slice(1)+"sw.js", serviceWorkerParam:{scope:DIR},
-                           notifyButton:{enable:false}, promptOptions:{slidedown:{prompts:[]}} });
-    OS = OneSignal;
-    const box=$("notifBox"), btn=$("notifBtn"), info=$("notifInfo");
-    const isIOS=IS_IOS, standalone=STANDALONE;
-    function refresh(){
-      if(!OneSignal.Notifications.isPushSupported()){
-        info.textContent = isIOS && !standalone
-          ? "На iPhone известията работят, след като добавите приложението на началния екран: бутон Сподели, после Добави към началния екран."
-          : "Този браузър не поддържа известия."; btn.hidden=true; return;
-      }
-      const on = OneSignal.Notifications.permission && OneSignal.User.PushSubscription.optedIn;
-      info.textContent = on ? "Известията са включени." : "Получавайте съобщенията на радиото като известие, дори когато не слушате.";
-      btn.textContent = on ? "Изключи известията" : "Включи известията";
-      btn.setAttribute("aria-pressed", on?"true":"false");
-      if(Notification.permission==="denied"){ info.textContent="Известията са забранени в настройките на браузъра. Разрешете ги оттам за този сайт."; }
-      renderOnboard();
-    }
-    btn.onclick=async ()=>{
+/* ===== Известия: програмата на OneSignal се зарежда САМО при нужда =====
+   (ако човекът вече ги е включил или натисне "Включи известията"). Така приложението е по-леко за всички. */
+const PUSH_OK = ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+let osLoading = null;
+function loadOS(){
+  if(osLoading) return osLoading;
+  osLoading = new Promise(resolve=>{
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    const sc=document.createElement("script"); sc.src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"; sc.defer=true;
+    sc.onerror=()=>resolve(null); document.head.appendChild(sc);
+    OneSignalDeferred.push(async function(OneSignal){
       try{
-        const on = OneSignal.Notifications.permission && OneSignal.User.PushSubscription.optedIn;
-        if(on){ await OneSignal.User.PushSubscription.optOut(); say("Известията са изключени"); }
-        else { await OneSignal.Notifications.requestPermission(); await OneSignal.User.PushSubscription.optIn(); if(OneSignal.Notifications.permission) say("Известията са включени"); }
-      }catch(e){}
-      refresh();
-    };
-    OneSignal.Notifications.addEventListener("permissionChange", refresh);
-    OneSignal.User.PushSubscription.addEventListener("change", refresh);
-    /* Известие, пристигнало докато приложението е отворено: показва се и се чете на глас */
-    OneSignal.Notifications.addEventListener("foregroundWillDisplay", e=>{
-      const n=e.notification, t=[n.title,n.body].filter(x=>x && x!=="Радио Интерхит").join(". ");
-      $("msgText").textContent=t; $("msgBox").hidden=false; sayLoud("Ново съобщение от радиото: "+t); beep();
+        await OneSignal.init({ appId: ONESIGNAL_APP_ID, serviceWorkerPath: DIR.slice(1)+"sw.js", serviceWorkerParam:{scope:DIR},
+                               notifyButton:{enable:false}, promptOptions:{slidedown:{prompts:[]}} });
+        OS = OneSignal;
+        OneSignal.Notifications.addEventListener("permissionChange", refreshNotif);
+        OneSignal.User.PushSubscription.addEventListener("change", refreshNotif);
+        OneSignal.Notifications.addEventListener("foregroundWillDisplay", e=>{
+          const n=e.notification, t=[n.title,n.body].filter(x=>x && x!=="Радио Интерхит").join(". ");
+          $("msgText").textContent=t; $("msgBox").hidden=false; sayLoud("Ново съобщение от радиото: "+t); beep();
+        });
+        resolve(OneSignal);
+      }catch(e){ resolve(null); }
+      refreshNotif();
     });
-    box.hidden=false; refresh();
   });
+  return osLoading;
+}
+function notifOn(){
+  if(OS) return !!(OS.Notifications.permission && OS.User.PushSubscription.optedIn);
+  return store("ih_push")==="1" && PUSH_OK && Notification.permission==="granted";
+}
+function notifPossible(){ return PUSH_OK && !notifOn() && Notification.permission!=="denied"; }
+function refreshNotif(){
+  const box=$("notifBox"), btn=$("notifBtn"), info=$("notifInfo");
+  setHid(box,false);
+  if(!PUSH_OK || (OS && !OS.Notifications.isPushSupported())){
+    setText(info, IS_IOS && !STANDALONE
+      ? "На iPhone известията работят, след като добавите приложението на началния екран: бутон Сподели, после Добави към началния екран."
+      : "Този браузър не поддържа известия."); setHid(btn,true); renderOnboard(); return;
+  }
+  const on = notifOn();
+  let it = on ? "Известията са включени." : "Получавайте съобщенията на радиото като известие, дори когато не слушате.";
+  if(Notification.permission==="denied") it="Известията са забранени в настройките на телефона. Разрешете ги оттам за това приложение.";
+  setText(info, it);
+  setText(btn, on ? "Изключи известията" : "Включи известията");
+  setAttr(btn, "aria-pressed", on?"true":"false");
+  renderOnboard();
+}
+/* Включване: разрешението се иска веднага при натискането (иначе iPhone го отказва), после се зарежда OneSignal. */
+async function enableNotif(){
+  if(!PUSH_OK) return;
+  let perm = Notification.permission;
+  try{ if(perm==="default") perm = await Notification.requestPermission(); }catch(e){}
+  if(perm!=="granted"){ say("Известията не са разрешени."); refreshNotif(); return; }
+  setText($("notifInfo"),"Включвам…");
+  const os = await loadOS();
+  try{ if(os){ await os.User.PushSubscription.optIn(); } }catch(e){}
+  if(notifOn() || (os && os.Notifications.permission)){ store("ih_push","1"); say("Известията са включени. Благодарим!"); }
+  else say("Не успях да включа известията. Опитайте пак.");
+  refreshNotif();
+}
+async function disableNotif(){
+  const os = await loadOS();
+  try{ if(os) await os.User.PushSubscription.optOut(); }catch(e){}
+  store("ih_push","0"); say("Известията са изключени"); refreshNotif();
+}
+if(ONESIGNAL_APP_ID){
+  $("notifBtn").onclick = ()=>{ notifOn() ? disableNotif() : enableNotif(); };
+  if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js",{scope:DIR}).catch(()=>{}); }
+  if(store("ih_push")==="1" || (PUSH_OK && Notification.permission==="granted")) loadOS();
+  refreshNotif();
 } else if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 </script>
 </body>
