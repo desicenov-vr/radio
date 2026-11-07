@@ -110,6 +110,7 @@ body.ob main{gap:14px}
 .mine .rep{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
 .mine .rep .who{color:#ffb3b3}
 h3.small{margin:4px 0 0;font-size:1rem}
+.free{display:inline-block;margin:0 0 8px;padding:3px 12px;border:1.5px solid var(--red);border-radius:999px;color:#ffb3b3;font-size:.9rem;font-weight:600}
 .airline{text-align:center;margin:0;font-weight:700;font-size:1.05rem}
 .chat{display:flex;flex-direction:column;gap:10px}
 .chatrow{display:flex;gap:8px;align-items:center}
@@ -124,6 +125,17 @@ h3.small{margin:4px 0 0;font-size:1rem}
 #wCount{text-align:right;font-variant-numeric:tabular-nums}
 .support{text-align:center}
 .note a{color:#ffb3b3}
+
+/* Симона: отделен чат, без намеса в радиоплеъра */
+.simona-log{max-height:19rem;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding:10px;background:#100c0e;border:1px solid var(--line);border-radius:12px}
+.simona-entry{padding:9px 11px;border-radius:10px;overflow-wrap:anywhere;white-space:pre-wrap}
+.simona-entry.listener{background:#292025}
+.simona-entry.dj{background:#301319;border:1px solid #6d2730}
+.simona-entry strong{display:block;margin-bottom:3px}
+.simona-input{width:100%;min-height:6rem;resize:vertical;font:inherit;color:var(--fg);background:#221820;border:1px solid var(--line);border-radius:12px;padding:12px}
+.simona-input:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.simona-actions{display:flex;gap:8px;flex-wrap:wrap}
+.simona-actions button{flex:1 1 8rem}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -175,6 +187,7 @@ h3.small{margin:4px 0 0;font-size:1rem}
 
   <section class="box" aria-labelledby="wTitle" id="writeBox" hidden>
     <h2 id="wTitle">Пиши ни</h2>
+    <p class="free">Поздравите в ефир са безплатни.</p>
     <p class="note airtxt" id="wNote">Проверявам…</p>
     <button class="wide" id="wToggle" type="button" aria-expanded="false" aria-controls="wForm">Напиши поздрав</button>
     <div id="wForm" hidden class="chat">
@@ -193,6 +206,23 @@ h3.small{margin:4px 0 0;font-size:1rem}
       <h3 class="small" id="wMineTitle">Твоите поздрави</h3>
       <ul class="mine" id="wList" aria-labelledby="wMineTitle"></ul>
     </div>
+  </section>
+
+
+  <section class="box" id="simonaBox" aria-labelledby="simonaTitle">
+    <h2 id="simonaTitle">Попитай Симона — виртуалната водеща</h2>
+    <p class="note">Симона е AI асистент на Radio Interhit. Можеш да ѝ пишеш за музика, поздрави и пожелания. Разговорът не изпраща автоматично заявки в ефир.</p>
+    <div class="simona-log" id="simonaLog" role="log" aria-label="Разговор със Симона" aria-live="off" aria-relevant="additions">
+      <div class="simona-entry dj"><strong>Симона</strong>Здравей! Аз съм Симона — виртуалната водеща на Radio Interhit. Как си днес?</div>
+    </div>
+    <label for="simonaText">Твоето съобщение до Симона</label>
+    <textarea id="simonaText" class="simona-input" maxlength="600" placeholder="Напиши съобщение…" aria-describedby="simonaHint"></textarea>
+    <p class="note" id="simonaHint">До 600 знака. Ctrl+Enter изпраща съобщението.</p>
+    <div class="simona-actions">
+      <button class="wide on" type="button" id="simonaSend">Изпрати на Симона</button>
+      <button class="wide" type="button" id="simonaClear">Изчисти разговора</button>
+    </div>
+    <p class="note" id="simonaStatus" role="status" aria-live="polite">Готова за разговор.</p>
   </section>
 
   <section class="box" aria-labelledby="sTitle">
@@ -697,6 +727,71 @@ if(MB_ON){
   mbPoll(); setInterval(mbPoll, 30000);
   document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) mbPoll(); });
 }
+
+
+/* ===== Симона: чат с отделен Cloudflare Worker =====
+   API ключът остава само в Worker, никога в GitHub. */
+const SIMONA_API = "https://simona-radio-interhit.desi-cenov.workers.dev/chat";
+const simonaHistory = [];
+let simonaBusy = false;
+function simonaAdd(who, message, cssClass){
+  const item=document.createElement("div");
+  item.className="simona-entry "+cssClass;
+  const name=document.createElement("strong");
+  name.textContent=who;
+  item.appendChild(name);
+  item.appendChild(document.createTextNode(message));
+  const log=$("simonaLog");
+  log.appendChild(item);
+  log.scrollTop=log.scrollHeight;
+}
+async function simonaSend(){
+  if(simonaBusy) return;
+  const field=$("simonaText"), message=field.value.trim();
+  if(!message){ $("simonaStatus").textContent="Напиши съобщение до Симона."; field.focus(); return; }
+  simonaBusy=true;
+  $("simonaSend").disabled=true;
+  $("simonaStatus").textContent="Симона подготвя отговор…";
+  simonaAdd("Ти",message,"listener");
+  field.value="";
+  const context=simonaHistory.slice(-8);
+  try{
+    const ctrl=new AbortController();
+    const timer=setTimeout(()=>ctrl.abort(),20000);
+    let response;
+    try{
+      response=await fetch(SIMONA_API,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({message,history:context}),signal:ctrl.signal
+      });
+    }finally{clearTimeout(timer);}
+    let data={};
+    try{data=await response.json();}catch(e){}
+    if(!response.ok) throw new Error("HTTP "+response.status);
+    const reply=typeof data.reply==="string" ? data.reply.trim() : "";
+    if(!reply) throw new Error("Празен отговор");
+    simonaHistory.push({role:"user",content:message},{role:"assistant",content:reply});
+    if(simonaHistory.length>8) simonaHistory.splice(0,simonaHistory.length-8);
+    simonaAdd("Симона",reply,"dj");
+    $("simonaStatus").textContent="Симона отговори. Отговорът е добавен в разговора.";
+  }catch(e){
+    $("simonaStatus").textContent="Няма връзка със Симона в момента. Съобщението не е изпратено. Опитай отново по-късно.";
+  }finally{
+    simonaBusy=false;
+    $("simonaSend").disabled=false;
+  }
+}
+$("simonaSend").addEventListener("click",simonaSend);
+$("simonaText").addEventListener("keydown",e=>{
+  if(e.key==="Enter" && e.ctrlKey){e.preventDefault();simonaSend();}
+});
+$("simonaClear").addEventListener("click",()=>{
+  simonaHistory.length=0;
+  $("simonaLog").innerHTML="";
+  simonaAdd("Симона","Здравей! Аз съм Симона — виртуалната водеща на Radio Interhit. Как си днес?","dj");
+  $("simonaStatus").textContent="Разговорът е изчистен.";
+  $("simonaText").focus();
+});
 
 /* Работа като приложение */
 const DIR = location.pathname.replace(/[^\/]*$/,"");   // напр. /radio/
