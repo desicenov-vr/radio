@@ -229,8 +229,12 @@ const PUSH_OK = ("serviceWorker" in navigator) && ("PushManager" in window) && (
 const audio = $("audio"), playBtn = $("play");
 let wantPlaying = false, retry = 0, retryTimer = null, sleepTimer = null, sleepEnd = 0, sleepTick = null;
 
-function say(t){ $("say").textContent=""; setTimeout(()=>$("say").textContent=t,50); }
-function sayLoud(t){ $("sayLoud").textContent=""; setTimeout(()=>$("sayLoud").textContent=t,50); }
+/* Говорът за екранния четец: текстът изчезва след 5 секунди, за да не го прочете TalkBack/VoiceOver
+   втори път, когато се стигне с плъзгане до края на страницата. */
+const sayT={};
+function speak(id,t){ const el=$(id); clearTimeout(sayT[id]); el.textContent=""; setTimeout(()=>{ el.textContent=t; sayT[id]=setTimeout(()=>{ el.textContent=""; },5000); },50); }
+function say(t){ speak("say",t); }
+function sayLoud(t){ speak("sayLoud",t); }
 /* Променяме екрана САМО ако има реална разлика: иначе VoiceOver на iPhone преглежда страницата наново и засича. */
 function setText(el,t){ if(el && el.textContent!==t) el.textContent=t; }
 function setHid(el,h){ if(el && el.hidden!==!!h) el.hidden=!!h; }
@@ -437,7 +441,7 @@ async function checkMessage(){
     const first = lastMsg===null; lastMsg = t;
     $("msgBox").hidden = !t; $("msgText").textContent = t;
     if(t){
-      if(first) say("Съобщение от радиото: "+t); else { sayLoud("Ново съобщение от радиото: "+t); beep(); if(navigator.vibrate) navigator.vibrate(200); }
+      if(!first){ sayLoud("Ново съобщение от радиото: "+t); beep(); if(navigator.vibrate) navigator.vibrate(200); }
     }
   }catch(e){}
 }
@@ -573,7 +577,7 @@ function setAirInfo(d){
   if(airHost===host) return; airHost = host;
   const txt = host ? "В ефир: " + host : "В момента няма никой в ефир.";
   setText($("airLine"), txt); setHid($("airLine"), false);
-  setText($("wNote"), txt);
+  setText($("wNote"), host ? "Поздравите се четат в ефир сега." : "Можеш да пишеш, когато има водещ в ефир.");   // не повтаря реда „В ефир“ горе
   if("mediaSession" in navigator && navigator.mediaSession.metadata){ try{ navigator.mediaSession.metadata.artist = host ? "с " + host : "Радио Интерхит"; }catch(e){} }
 }
 function setMbOpen(open){
