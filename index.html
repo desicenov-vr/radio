@@ -212,13 +212,13 @@ section.box.req{border:2px solid var(--red)}
     <h2 id="wTitle">Пиши ни</h2>
     <p class="free">Поздравите в ефир са безплатни.</p>
     <p class="note airtxt" id="wNote">Проверявам…</p>
-    <button class="wide" id="wToggle" type="button" aria-expanded="false" aria-controls="wForm">Напиши поздрав</button>
+    <button class="wide" id="wToggle" type="button" aria-expanded="false" aria-controls="wForm">Напиши послание</button>
     <div id="wForm" hidden class="chat">
       <div id="wNameRow" class="field"><label for="wName">Твоето име</label><input id="wName" maxlength="40" autocomplete="given-name" enterkeyhint="next"></div>
       <p class="note" id="wAs" hidden><span id="wAsText"></span> <button type="button" class="linkbtn" id="wAsChange">Смени</button></p>
       <div class="chatrow">
-        <label for="wText" class="sr">Поздрав</label>
-        <input id="wText" maxlength="150" autocomplete="off" enterkeyhint="send" placeholder="Напиши поздрав…">
+        <label for="wText" class="sr">Послание</label>
+        <input id="wText" maxlength="150" autocomplete="off" enterkeyhint="send" placeholder="Напиши послание…">
         <button id="wSend" type="button" class="sendbtn" aria-label="Изпрати"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20.5 21 12 3 3.5l.01 6.6L15 12 3.01 13.9z"/></svg></button>
       </div>
       <p class="note" id="wCount" aria-hidden="true">0 / 150</p>
@@ -226,7 +226,7 @@ section.box.req{border:2px solid var(--red)}
     </div>
     <p class="note" id="wTip" hidden>Ако смяташ, че се справяме добре и искаш да ни подкрепиш, можеш да го направиш <a id="wTipLink" href="#" target="_blank" rel="noopener">тук</a>.</p>
     <div id="wMine" hidden>
-      <h3 class="small" id="wMineTitle">Твоите поздрави</h3>
+      <h3 class="small" id="wMineTitle">Твоите послания</h3>
       <ul class="mine" id="wList" aria-labelledby="wMineTitle"></ul>
     </div>
   </section>
@@ -617,10 +617,10 @@ function setMbOpen(open){
   setHid($("writeBox"),false);
   if(mbOpen){
     t.removeAttribute("aria-disabled"); t.classList.add("on");
-    t.textContent = mbFormOpen ? "Скрий" : "Напиши поздрав";
+    t.textContent = mbFormOpen ? "Скрий" : "Напиши послание";
   } else {
     t.setAttribute("aria-disabled","true"); t.classList.remove("on");
-    t.textContent = "Напиши поздрав";
+    t.textContent = "Напиши послание";
     mbFormOpen = false; $("wForm").hidden = true; t.setAttribute("aria-expanded","false");
   }
 }
@@ -638,7 +638,7 @@ function renderMine(items){
   let seen = +(store("ih_seen")||0), newest = seen, fresh = [];
   items.forEach(m=>{
     const li=document.createElement("li");
-    const a=document.createElement("div"); a.className="who"; a.textContent = "Твоят поздрав"; li.appendChild(a);
+    const a=document.createElement("div"); a.className="who"; a.textContent = "Твоето послание"; li.appendChild(a);
     const p=document.createElement("div"); p.textContent=m.text; li.appendChild(p);
     const r=document.createElement("div"); r.className="rep";
     const rw=document.createElement("div"); rw.className="who";
@@ -676,8 +676,8 @@ function setReqOpen(open){
 }
 function reqClearPick(){ reqSong=null; setHid($("rPick"),true); }
 function orderStatus(o){
-  if(o.st==="new") return "Приета, чака радиото.";
-  if(o.st==="queued") return o.ahead>0 ? "В опашката, след около " + o.ahead + " " + (o.ahead===1?"песен":"песни") + "." : "Звучи следваща.";
+  if(o.st==="new") return "Вашата поръчка е приета. Моля, изчакайте търпеливо.";
+  if(o.st==="queued") return o.ahead>0 ? "В опашката, след около " + o.ahead + " " + (o.ahead===1?"песен":"песни") + "." : "Вашата поръчка ще прозвучи скоро.";
   if(o.st==="missing") return "Обработва се.";
   if(o.st==="playing") return "Звучи сега!";
   if(o.st==="done") return "Изсвири.";
@@ -769,7 +769,7 @@ if(MB_ON){
         const found = !!reqSong.sid;
         store("ih_ord","1"); if(name) store("ih_name", name);
         $("rDed").value=""; $("rQ").value=""; $("rList").innerHTML=""; reqClearPick(); setHid($("rWait"),true);
-        m = found ? "Поръчката е приета. Ще звучи скоро." : "Поръчката е приета. Обработва се.";
+        m = found ? "Вашата поръчка е приета. Ще прозвучи скоро." : "Обработва се.";
         reqSong = null; mbPoll();
       }
       else if(d.error==="too_fast"){ const mm=Math.max(1,Math.ceil((d.wait||1800)/60)); m = "Можеш да поръчаш следваща песен след " + minWord(mm) + "."; }
@@ -803,7 +803,7 @@ if(MB_ON){
     if(!mbOpen){ say("В момента няма никой в ефир."); return; }
     mbFormOpen = !mbFormOpen; $("wForm").hidden = !mbFormOpen;
     $("wToggle").setAttribute("aria-expanded", mbFormOpen?"true":"false");
-    $("wToggle").textContent = mbFormOpen ? "Скрий" : "Напиши поздрав";
+    $("wToggle").textContent = mbFormOpen ? "Скрий" : "Напиши послание";
     if(mbFormOpen){ (store("ih_name") ? $("wText") : $("wName")).focus(); }
   });
   /* брояч на знаците: вижда се винаги, а четецът казва само близо до края */
@@ -839,7 +839,7 @@ if(MB_ON){
     const m=minsLeft();
     if(m>0){ say("Ще можете да пратите следващ поздрав след " + m + " " + (m===1?"минута":"минути") + "."); return; }
     const text=$("wText").value.trim(), name=$("wName").value.trim();
-    if(!text){ say("Напишете поздрав."); $("wText").focus(); return; }
+    if(!text){ say("Напишете послание."); $("wText").focus(); return; }
     sending = true;
     try{
       const sub = (OS && OS.User && OS.User.PushSubscription && OS.User.PushSubscription.id) || "";
