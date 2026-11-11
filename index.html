@@ -126,12 +126,46 @@ h3.small{margin:4px 0 0;font-size:1rem}
 .support{text-align:center}
 .note a{color:#ffb3b3}
 [hidden]{display:none!important}
+section.box.req{border:2px solid var(--red)}
+.results{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.results button{width:100%;min-height:48px;text-align:left;border-radius:12px;border:1px solid var(--line);background:#221820;color:var(--fg);font:inherit;font-weight:600;padding:10px 12px;cursor:pointer;overflow-wrap:anywhere}
+.pick{display:flex;flex-direction:column;gap:10px}
+.chosen{margin:0;font-weight:700;overflow-wrap:anywhere}
+.mine .st{margin-top:6px;font-weight:600}
+.mine .st.play{color:var(--ok)}
 </style>
 </head>
 <body>
 <main>
   <img class="logo" src="icon-512.png" alt="Лого на Радио Интерхит">
   <h1>Радио Интерхит</h1>
+
+  <section class="box req" aria-labelledby="rTitle" id="reqBox" hidden>
+    <h2 id="rTitle">Поръчай си песен</h2>
+    <div id="reqForm" hidden>
+      <p class="note">Няма водещ в ефир, затова сам избираш какво да звучи. Поръчките звучат по ред, веднага след песента, която върви сега.</p>
+      <div class="chatrow">
+        <label for="rQ" class="sr">Търси песен или изпълнител</label>
+        <input id="rQ" maxlength="60" autocomplete="off" enterkeyhint="search" placeholder="Търси песен или изпълнител…">
+        <button id="rGo" type="button" class="sendbtn" aria-label="Търси"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg></button>
+      </div>
+      <p class="note" id="rInfo" hidden></p>
+      <ul class="results" id="rList" aria-label="Намерени песни" hidden></ul>
+      <button class="wide" id="rAnyway" type="button" hidden></button>
+      <div id="rPick" hidden class="pick">
+        <p id="rChosen" class="chosen"></p>
+        <div id="rNameRow" class="field"><label for="rName">Твоето име</label><input id="rName" maxlength="40" autocomplete="given-name" enterkeyhint="next"></div>
+        <div class="field"><label for="rDed">Посвещение, ако искаш (до 100 знака)</label><input id="rDed" maxlength="100" autocomplete="off" enterkeyhint="send"></div>
+        <button class="send2" id="rSend" type="button">Поръчай</button>
+        <button class="later" id="rCancel" type="button">Избери друга</button>
+      </div>
+      <p class="note" id="rWait" hidden></p>
+    </div>
+    <div id="rMine" hidden>
+      <h3 class="small" id="rMineTitle">Твоите поръчки</h3>
+      <ul class="mine" id="rOrders" aria-labelledby="rMineTitle"></ul>
+    </div>
+  </section>
 
   <section class="onboard" id="onboard" aria-labelledby="obTitle" hidden>
     <h2 id="obTitle"></h2>
@@ -170,7 +204,7 @@ h3.small{margin:4px 0 0;font-size:1rem}
 
   <section class="box" aria-labelledby="nTitle" id="notifBox" hidden>
     <h2 id="nTitle">Известия от радиото</h2>
-    <p class="note" id="notifInfo">Получавайте съобщенията на радиото като известие, дори когато не слушате.</p>
+    <p class="note" id="notifInfo">Научавайте първи за предаванията и новините на радиото и кога ще прозвучи вашият поздрав.</p>
     <button class="wide" id="notifBtn" type="button">Включи известията</button>
   </section>
 
@@ -514,7 +548,7 @@ function pickCard(){
     if(IS_ANDROID) return {k:"android", t:"Инсталирайте Радио Интерхит", b:
       "<p>Нека Интерхит бъде винаги с вас.</p><ol><li><span>Натиснете "+ICON_DOTS+" горе вдясно в Chrome.</span></li><li>Изберете „Инсталиране на приложението“ (на някои телефони пише „Добавяне към началния екран“).</li></ol>"};
   }
-  if(notifPossible()) return {k:"notif", t:"Искате ли съобщения от радиото?", b:"<p>Ще ви известяваме, когато сме на живо, за специални предавания и новини.</p>", a:"Да, включи известията", fn:enableNotif};
+  if(notifPossible()) return {k:"notif", t:"Искате ли да научавате първи?", b:"<p>Ще ви известяваме за предаванията и новините на радиото и кога ще прозвучи вашият поздрав.</p>", a:"Да, включи известията", fn:enableNotif};
   return null;
 }
 function renderOnboard(){
@@ -591,7 +625,7 @@ function setMbOpen(open){
   }
 }
 function applyState(d){
-  setAirInfo(d); setMbOpen(d.open);
+  setAirInfo(d); setMbOpen(d.open); setReqOpen(!!d.req); if(d.orders) renderOrders(d.orders);
   const sl=$("supportLink");
   if(d.radio){ if(sl.getAttribute("href")!==d.radio) sl.href=d.radio; setHid(sl,false); } else setHid(sl,true);
 }
@@ -619,9 +653,138 @@ function renderMine(items){
 async function mbPoll(){
   if(!MB_ON || document.hidden) return;
   try{
-    if(store("ih_sent")){ const d = await mbGet({action:"replies", id:myId()}); applyState(d); renderMine(d.items||[]); }
+    if(store("ih_sent") || store("ih_ord")){ const d = await mbGet({action:"replies", id:myId()}); applyState(d); renderMine(d.items||[]); }
     else { const d = await mbGet({action:"status"}); applyState(d); }
   }catch(e){}
+}
+/* ===== Поръчай си песен (само когато няма водещ) ===== */
+let reqOpen = null, reqHasOrders = false, reqSong = null;
+const NOT_HERE = "Тази песен я нямаме в базата данни. Ще уведомим администратора. Поръчай си друга песен.";
+function minWord(m){ return m + " " + (m===1 ? "минута" : "минути"); }
+function reqBoxShow(){
+  setHid($("reqBox"), !(reqOpen || reqHasOrders));
+  setHid($("reqForm"), !reqOpen);
+  setText($("rTitle"), reqOpen ? "Поръчай си песен" : "Твоите поръчки");
+  setHid($("rMineTitle"), !reqOpen);
+}
+function setReqOpen(open){
+  if(reqOpen===open) return;
+  const was = reqOpen; reqOpen = open;
+  if(!open){ reqClearPick(); setHid($("rList"),true); setHid($("rAnyway"),true); setHid($("rInfo"),true); }
+  reqBoxShow();
+  if(was===false && open) say("Можеш да си поръчаш песен. Най-горе е.");
+}
+function reqClearPick(){ reqSong=null; setHid($("rPick"),true); }
+function orderStatus(o){
+  if(o.st==="new") return "Приета, чака радиото.";
+  if(o.st==="queued") return o.ahead>0 ? "В опашката, след около " + o.ahead + " " + (o.ahead===1?"песен":"песни") + "." : "Звучи следваща.";
+  if(o.st==="missing") return "Обработва се.";
+  if(o.st==="playing") return "Звучи сега!";
+  if(o.st==="done") return "Изсвири.";
+  if(o.st==="cancelled") return o.msg || "Отказана.";
+  return "";
+}
+let ordSig = "";
+function renderOrders(list){
+  const recent = list.filter(o => Date.now() - o.t < 6*3600e3);
+  reqHasOrders = recent.length > 0; reqBoxShow();
+  const sig = JSON.stringify(recent.map(o=>[o.key,o.st,o.ahead,o.msg]));
+  if(sig===ordSig) return; ordSig = sig;
+  let seen = {}; try{ seen = JSON.parse(store("ih_ost")||"{}"); }catch(e){}
+  const ul = $("rOrders"); ul.innerHTML = ""; setHid($("rMine"), !recent.length);
+  const loud = [], next = {};
+  recent.forEach(o=>{
+    next[o.key] = o.st;
+    const li=document.createElement("li");
+    const a=document.createElement("div"); a.className="who"; a.textContent="Твоята поръчка"; li.appendChild(a);
+    const n=document.createElement("div"); n.textContent=o.song; li.appendChild(n);
+    const st=document.createElement("div"); st.className="st"+(o.st==="playing"?" play":""); st.textContent=orderStatus(o); li.appendChild(st);
+    ul.appendChild(li);
+    if(seen[o.key] && seen[o.key]!==o.st){
+      if(o.st==="playing") loud.push("Твоята песен звучи сега! " + o.song);
+      else if(o.st==="cancelled") loud.push(o.msg || ("Поръчката ти е отказана: " + o.song));
+    }
+  });
+  store("ih_ost", JSON.stringify(next));
+  if(loud.length){ sayLoud(loud.join(". ")); beep(); if(navigator.vibrate) navigator.vibrate(200); }
+}
+if(MB_ON){
+  let reqQ = "";
+  function reqName(){
+    const n = store("ih_name") || "";
+    setHid($("rNameRow"), !!n); $("rName").value = n;
+  }
+  async function reqSearch(){
+    const q = $("rQ").value.trim();
+    if(q.length < 2){ say("Напиши поне две букви."); $("rQ").focus(); return; }
+    reqQ = q; reqClearPick();
+    setText($("rInfo"), "Търся…"); setHid($("rInfo"), false);
+    try{
+      const d = await mbGet({action:"search", q});
+      if(d.error==="req_closed"){ setReqOpen(false); mbPoll(); say("Поръчките в момента са спрени."); return; }
+      const items = d.items || [], ul = $("rList"); ul.innerHTML = "";
+      items.forEach(it=>{
+        const li=document.createElement("li"), b=document.createElement("button");
+        b.type="button"; b.textContent=it.n;
+        b.addEventListener("click", ()=>reqChoose({sid:it.i, name:it.n}));
+        li.appendChild(b); ul.appendChild(li);
+      });
+      setHid(ul, !items.length);
+      $("rAnyway").textContent = "Песента, която търся, я няма в списъка";
+      setHid($("rAnyway"), !items.length);
+      const msg = items.length ? "Намерих " + items.length + " " + (items.length===1?"песен":"песни") + "." : NOT_HERE;
+      setText($("rInfo"), msg); say(msg);
+      if(items.length) ul.querySelector("button").focus(); else $("rQ").select();
+    }catch(e){ setText($("rInfo"), "Няма връзка. Опитай пак."); say("Няма връзка. Опитай пак."); }
+  }
+  function reqChoose(song){
+    reqSong = song; reqName();
+    setText($("rChosen"), "Избра: " + song.name);
+    setHid($("rPick"), false); setHid($("rList"), true); setHid($("rAnyway"), true); setHid($("rInfo"), true);
+    (store("ih_name") ? $("rDed") : $("rName")).focus();
+  }
+  $("rGo").addEventListener("click", reqSearch);
+  $("rQ").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); reqSearch(); } });
+  $("rAnyway").addEventListener("click", ()=>{
+    mbGet({action:"wish", q:reqQ, id:myId()}).catch(()=>{});
+    $("rList").innerHTML=""; setHid($("rList"),true); setHid($("rAnyway"),true);
+    setText($("rInfo"), NOT_HERE); setHid($("rInfo"), false); say(NOT_HERE);
+    $("rQ").focus(); $("rQ").select();
+  });
+  $("rCancel").addEventListener("click", ()=>{ reqClearPick(); setHid($("rList"), !$("rList").children.length); setHid($("rAnyway"), false); $("rQ").focus(); });
+  $("rName").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("rDed").focus(); } });
+  $("rDed").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("rSend").click(); } });
+  let ordering = false;
+  $("rSend").addEventListener("click", async ()=>{
+    if(ordering || !reqSong) return;
+    const name = $("rName").value.trim(), ded = $("rDed").value.trim();
+    ordering = true;
+    try{
+      const sub = (typeof OS!=="undefined" && OS && OS.User && OS.User.PushSubscription && OS.User.PushSubscription.id) || "";
+      const p = {action:"order", id:myId(), name, ded, sub};
+      if(reqSong.sid) p.sid = reqSong.sid; else p.text = reqSong.text;
+      const d = await mbGet(p);
+      let m;
+      if(d.ok){
+        const found = !!reqSong.sid;
+        store("ih_ord","1"); if(name) store("ih_name", name);
+        $("rDed").value=""; $("rQ").value=""; $("rList").innerHTML=""; reqClearPick(); setHid($("rWait"),true);
+        m = found ? "Поръчката е приета. Ще звучи скоро." : "Поръчката е приета. Обработва се.";
+        reqSong = null; mbPoll();
+      }
+      else if(d.error==="too_fast"){ const mm=Math.max(1,Math.ceil((d.wait||1800)/60)); m = "Можеш да поръчаш следваща песен след " + minWord(mm) + "."; }
+      else if(d.error==="full"){ m = "Опашката е пълна. Опитай пак след няколко песни."; }
+      else if(d.error==="repeat"){ m = "Тази песен вече е поръчана или прозвуча наскоро. Избери друга."; }
+      else if(d.error==="host"){ m = d.msg || "Водещият влезе в ефир. Обърнете се към него."; setReqOpen(false); }
+      else if(d.error==="not_here"){ m = NOT_HERE; }
+      else if(d.error==="no_song"){ m = "Тази песен вече я няма. Потърси отново."; }
+      else if(d.error==="req_off" || d.error==="req_down"){ m = "Поръчките в момента са спрени."; setReqOpen(false); }
+      else m = "Не успях да поръчам. Опитай пак.";
+      setText($("rWait"), m); setHid($("rWait"), !reqOpen || !!d.ok); say(m);
+      if(d.ok) $("rQ").focus();
+    }catch(e){ say("Няма връзка. Опитай пак."); }
+    ordering = false;
+  });
 }
 if(MB_ON){
   const MAXC = 150;
@@ -743,7 +906,7 @@ function refreshNotif(){
       : "Този браузър не поддържа известия."); setHid(btn,true); renderOnboard(); return;
   }
   const on = notifOn();
-  let it = on ? "Известията са включени." : "Получавайте съобщенията на радиото като известие, дори когато не слушате.";
+  let it = on ? "Известията са включени." : "Научавайте първи за предаванията и новините на радиото и кога ще прозвучи вашият поздрав.";
   if(Notification.permission==="denied") it="Известията са забранени в настройките на телефона. Разрешете ги оттам за това приложение.";
   setText(info, it);
   setText(btn, on ? "Изключи известията" : "Включи известията");
