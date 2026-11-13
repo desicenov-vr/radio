@@ -215,7 +215,14 @@ h3.small{margin:4px 0 0;font-size:1rem}
 
 <script>
 /* ================= НАСТРОЙКИ ================= */
-const STREAM_URL = "https://play.123castbg.eu:18425/stream";   // директният линк към потока
+const STREAM_URL = "https://play.123castbg.eu:18425/stream";   // основният линк към потока
+/* Резервните линкове: приложението минава на тях само, ако интернетът се дави или основният линк не работи.
+   Подредени от най-тежкия към най-лекия; HLS се ползва само на iPhone и iPad, защото Apple го пуска сам. */
+const STREAMS = [
+  { url: STREAM_URL, mime: "audio/mpeg", name: "MP3" },
+  { url: "https://play.123castbg.eu:18425/stream.aac", mime: "audio/aac", name: "AAC" },
+  { url: "https://play.123castbg.eu/hls/DJ-Desi-Tsenov/index.m3u8", hls: true, name: "HLS" },
+];
 const ONESIGNAL_APP_ID = "ae71f056-26a0-49ab-8b80-85bebfd8ff03";   // кодът на приложението от OneSignal (App ID)
 const SHOW_SONG  = true;   // false = никога да не се показва името на песента
 const MESSAGE_FILE = "saobshtenie.txt";       // файлът със съобщението до слушателите
@@ -264,9 +271,63 @@ let mse = null;   // текущото теглене: {ms, sb, ctrl, queue, done
 /* На iPhone и iPad ползваме вградения плейър на Apple: той сам пази запас (като TuneIn) и не товари VoiceOver.
    Собственото теглене със запас е само за Android и компютри. */
 const APPLE_MOBILE = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
-let useMSE = !APPLE_MOBILE && !!(window.MediaSource && MediaSource.isTypeSupported && MediaSource.isTypeSupported("audio/mpeg"));
+let useMSE = !APPLE_MOBILE && !!(window.MediaSource && MediaSource.isTypeSupported);
 
-function liveUrl(){ return STREAM_URL + (STREAM_URL.includes("?")?"&":"?") + "t=" + Date.now(); }
+/* ===== Кой линк: според интернета ===== */
+const LINKS = STREAMS.filter(x => x.url && (!x.hls || APPLE_MOBILE));   // HLS само там, където телефонът го пуска сам
+let qi = 0;                      // текущият линк в LINKS
+let stalls = [];                 // кога е засичало напоследък
+let failsHere = 0;               // поредни неуспехи да тръгне на този линк
+function cur(){ return LINKS[qi] || LINKS[0]; }
+function mseOk(x){ return useMSE && !x.hls && MediaSource.isTypeSupported(x.mime); }
+function slowNet(){
+  const c = navigator.connection;
+  return !!(c && (c.saveData || /(^|-)2g|3g/.test(c.effectiveType || "")));
+}
+function pickStart(){
+  /* при бавен мобилен интернет започваме направо с по-лекия линк */
+  qi = 0; failsHere = 0; stalls = [];
+  if(slowNet() && LINKS.length > 1) qi = 1;
+}
+function lighter(why){
+  if(qi >= LINKS.length - 1) return false;
+  qi++; failsHere = 0; stalls = [];
+  console.log("минавам на " + cur().name + ": " + why);
+  return true;
+}
+/* засичане: два пъти за две минути значи, че интернетът не стига за този линк */
+function noteStall(){
+  const now = Date.now();
+  stalls = stalls.filter(t => now - t < 120000);
+  if(stalls.length && now - stalls[stalls.length-1] < 10000) return false;   // едно и също засичане не се брои два пъти
+  stalls.push(now);
+  if(stalls.length >= 2 && lighter("засича")){ retry = 0; start(true); return true; }
+  return false;
+}
+/* линкът изобщо не тръгва: след два опита пробваме следващия, а накрая пак първия */
+function linkFailed(){
+  failsHere++;
+  if(failsHere >= 2 && LINKS.length > 1){
+    qi = (qi + 1) % LINKS.length; failsHere = 0; stalls = [];
+    console.log("линкът не работи, пробвам " + cur().name);
+  }
+}
+
+/* Ако сървърът казва качеството на всеки линк, по-лекият става резервен, каквото и да е разширението му */
+let ordered = false;
+function orderByBitrate(list){
+  if(ordered || wantPlaying) return;
+  const kbps = {};
+  list.forEach(x=>{ const u=(x.listenurl||"").replace(/^https?:\/\/[^/]+/,""); const b=+(x.bitrate||x.audio_bitrate||x["ice-bitrate"]||0); if(u && b) kbps[u]=b>1000?b/1000:b; });
+  const k = l => kbps[l.url.replace(/^https?:\/\/[^/]+/,"")];
+  const direct = LINKS.filter(l=>!l.hls && k(l)), rest = LINKS.filter(l=>!(!l.hls && k(l)));
+  if(direct.length < 2) return;
+  direct.sort((a,b)=>k(b)-k(a));
+  LINKS.splice(0, LINKS.length, ...direct, ...rest);
+  ordered = true;
+}
+
+function liveUrl(){ const u = cur().url; return cur().hls ? u : u + (u.includes("?")?"&":"?") + "t=" + Date.now(); }
 function ahead(){ try{ const b=audio.buffered; return b.length ? b.end(b.length-1) - audio.currentTime : 0; }catch(e){ return 0; } }
 function endMSE(){
   if(!mse) return;
@@ -282,12 +343,12 @@ function startMSE(){
   audio.src = URL.createObjectURL(ms);
   ms.addEventListener("sourceopen", async ()=>{
     if(m.done) return;
-    try{ m.sb = ms.addSourceBuffer("audio/mpeg"); m.sb.mode = "sequence"; }catch(e){ fallbackPlain(); return; }
+    try{ m.sb = ms.addSourceBuffer(cur().mime); m.sb.mode = "sequence"; }catch(e){ fallbackPlain(); return; }
     m.sb.addEventListener("updateend", ()=>pump(m));
     let res;
     try{ res = await fetch(liveUrl(), { signal: ctrl.signal, cache: "no-store" }); }
-    catch(e){ if(m.done) return; if(!m.gotData){ fallbackPlain(); } else reconnect(); return; }
-    if(!res.ok || !res.body){ if(!m.gotData) fallbackPlain(); else reconnect(); return; }
+    catch(e){ if(m.done) return; if(!m.gotData){ linkFailed(); reconnect(); } else reconnect(); return; }
+    if(!res.ok || !res.body){ if(!m.gotData) linkFailed(); reconnect(); return; }
     const reader = res.body.getReader();
     try{
       for(;;){
@@ -326,16 +387,17 @@ function pump(m){
 }
 function fallbackPlain(){
   useMSE = false; endMSE();   // само до затваряне на приложението; следващия път пробва пак
-  if(wantPlaying) start();
+  if(wantPlaying) start(true);
 }
 
-function start(){
+function start(keepLink){
+  if(!wantPlaying && keepLink !== true) pickStart();   // ново пускане: пак от най-добрия линк, който интернетът позволява
   wantPlaying = true; starting = true; pausedAt = 0;
   if(!/^https:\/\//.test(STREAM_URL)){ setStatus("Липсва линк за слушане в настройките."); say("Липсва линк за слушане."); return; }
   setStatus("Свързване…"); if(!announced && retry===0) say("Свързване");
   lastCT = -1; lastCTAt = Date.now();
   setUi(true);
-  if(useMSE){ startMSE(); }
+  if(mseOk(cur())){ startMSE(); }
   else {
     endMSE();
     audio.src = liveUrl();
@@ -354,12 +416,13 @@ function stop(silent){ pauseRadio(silent); }
 playBtn.addEventListener("click", ()=> wantPlaying ? pauseRadio() : start());
 
 audio.addEventListener("playing", ()=>{
-  starting = false; retry = 0; lastCTAt = Date.now(); setStatus("Свири",true);
+  starting = false; retry = 0; failsHere = 0; lastCTAt = Date.now(); setStatus("Свири",true);
   if(!announced){ announced=true; say("Радиото свири"); }
 });
 audio.addEventListener("waiting", ()=>{
   if(!wantPlaying) return;
   setStatus("Зареждане…");
+  if(!starting && noteStall()) return;   // засича често: минаваме на по-лекия линк
   /* при изчерпан запас изчакваме да се натрупа отново, вместо да засича на парчета */
   if(mse && ahead() < 0.5){ audio.pause(); }
 });
@@ -369,13 +432,14 @@ audio.addEventListener("pause", ()=>{
 });
 function reconnect(){
   if(!wantPlaying) return;
+  if(!starting && noteStall()) return;   // засича често: минаваме на по-лекия линк
   retry++; const wait = retry===1 ? 1 : Math.min(20, 3*retry);
   setStatus("Връзката прекъсна. Свързвам се отново…");
   if(retry===2) say("Връзката прекъсна, свързвам се отново");
   endMSE();
-  clearTimeout(retryTimer); retryTimer = setTimeout(start, wait*1000);
+  clearTimeout(retryTimer); retryTimer = setTimeout(()=>start(true), wait*1000);
 }
-audio.addEventListener("error", ()=>{ if(wantPlaying && !mse) reconnect(); });
+audio.addEventListener("error", ()=>{ if(wantPlaying && !mse){ if(starting) linkFailed(); reconnect(); } });
 audio.addEventListener("ended", ()=>{ if(!mse) reconnect(); });
 /* Пазач: гледа направо часовника на плейъра. Рестартира само ако звукът стои на едно място над 25 секунди. */
 setInterval(()=>{
@@ -384,7 +448,7 @@ setInterval(()=>{
   if(ct !== lastCT){ lastCT = ct; lastCTAt = Date.now(); return; }
   if(Date.now() - lastCTAt > 25000) reconnect();
 }, 5000);
-window.addEventListener("online", ()=>{ if(wantPlaying && Date.now()-lastCTAt > 8000){ retry=0; start(); } });
+window.addEventListener("online", ()=>{ if(wantPlaying && Date.now()-lastCTAt > 8000){ retry=0; start(true); } });
 
 /* Бутони на заключения екран и в известията */
 if("mediaSession" in navigator){
@@ -476,7 +540,8 @@ async function checkSong(){
         const r=await fetch(BASE+"/status-json.xsl?t="+Date.now(),{cache:"no-store"});
         const j=await r.json(); metaMode="ice";
         const list=[].concat((j.icestats&&j.icestats.source)||[]);
-        const src=list.find(x=>(x.listenurl||"").endsWith("/stream"))||list[0]||{};
+        const src=list.find(x=>(x.listenurl||"").endsWith("/stream")&&x.title)||list.find(x=>x.title)||list[0]||{};
+        orderByBitrate(list);
         showSong(src.title || ((src.artist?src.artist+" - ":"")+(src.title||""))); songFails=0;
         return;
       }catch(e){ if(metaMode==="ice") throw e; }
