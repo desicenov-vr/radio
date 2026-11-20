@@ -1,6 +1,7 @@
 {
   "name": "Радио Интерхит",
   "short_name": "Интерхит",
+  "description": "Хитовете, които обичаш.",
   "lang": "bg",
   "start_url": "./",
   "scope": "./",

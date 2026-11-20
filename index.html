@@ -3,8 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Радио Интерхит</title>
-<meta name="description" content="Слушайте Радио Интерхит на живо">
+<title>Радио Интерхит, твоята музикална компания</title>
+<meta name="description" content="Хитовете, които обичаш.">
+<meta property="og:title" content="Радио Интерхит, твоята музикална компания">
+<meta property="og:description" content="Хитовете, които обичаш.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="bg_BG">
 <meta name="theme-color" content="#0b0709">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.png" type="image/png">
@@ -36,6 +40,7 @@ main{max-width:30rem;margin:0 auto;display:flex;flex-direction:column;gap:20px;p
 .logo{width:min(70vw,260px);aspect-ratio:1;max-width:100%;margin:0 auto;border-radius:22%;
   box-shadow:0 10px 50px rgba(255,42,42,.25);display:block}
 h1{font-size:1.6rem;margin:0;text-align:center;letter-spacing:.02em}
+.slogan{margin:-14px 0 0;text-align:center;color:var(--muted);font-size:1rem;font-style:italic;letter-spacing:.04em}
 .status{text-align:center;color:var(--muted);margin:0;min-height:1.5em}
 .status.live{color:var(--ok)}
 .now{display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#2a0f14,var(--panel));border:1px solid var(--line);border-radius:18px;padding:12px;text-align:left;box-shadow:0 8px 30px rgba(0,0,0,.35)}
@@ -144,6 +149,7 @@ h3.small{margin:4px 0 0;font-size:1rem}
 <main>
   <img class="logo" src="icon-512.png" alt="Лого на Радио Интерхит">
   <h1>Радио Интерхит</h1>
+  <p class="slogan">Твоята музикална компания</p>
 
   <section class="onboard" id="onboard" aria-labelledby="obTitle" hidden>
     <h2 id="obTitle"></h2>
@@ -470,7 +476,7 @@ window.addEventListener("online", ()=>{ if(wantPlaying && Date.now()-lastCTAt > 
 /* Бутони на заключения екран и в известията */
 if("mediaSession" in navigator){
   navigator.mediaSession.metadata = new MediaMetadata({
-    title:"Радио Интерхит", artist:"На живо",
+    title:"Радио Интерхит", artist:"Твоята музикална компания",
     artwork:[{src:"icon-192.png",sizes:"192x192",type:"image/png"},{src:"icon-512.png",sizes:"512x512",type:"image/png"}]
   });
   navigator.mediaSession.setActionHandler("play", ()=>{ if(!wantPlaying) start(); });
@@ -501,7 +507,7 @@ $("share").addEventListener("click", async ()=>{
   const url = location.href.split("#")[0];
   const info=$("shareInfo");
   try{
-    if(navigator.share){ await navigator.share({title:"Радио Интерхит",text:"Слушай Радио Интерхит! Отвори линка и следвай стъпката най-горе, за да го сложиш на телефона си:",url}); return; }
+    if(navigator.share){ await navigator.share({title:"Радио Интерхит",text:"Слушай Радио Интерхит, твоята музикална компания! Отвори линка и следвай стъпката най-горе, за да го сложиш на телефона си:",url}); return; }
     await navigator.clipboard.writeText(url);
     info.textContent="Линкът е копиран: "+url; info.hidden=false; say("Линкът е копиран");
   }catch(e){
@@ -541,7 +547,7 @@ let nowKey = "";
 function showSong(title, artist, cover){
   title=(title||"").trim(); artist=(artist||"").trim();
   if(!artist && title.includes(" - ")){ const p=title.split(" - "); artist=p.shift().trim(); title=p.join(" - ").trim(); }
-  if(!title || /^(unknown|-|n\/a)$/i.test(title)){ if(!$("nowBox").hidden){ setHid($("nowBox"),true); setText($("song"),""); nowKey=""; resetMeta(); } return; }
+  if(!title || /^(unknown|-|n\/a)$/i.test(title) || (!artist && /inter\s*hit|интерхит/i.test(title))){ if(!$("nowBox").hidden){ setHid($("nowBox"),true); setText($("song"),""); nowKey=""; resetMeta(); } return; }
   const key=title+"|"+artist+"|"+(cover||"");
   if(key===nowKey && !$("nowBox").hidden) return; nowKey=key;
   setText($("song"), title);
@@ -555,10 +561,17 @@ function showSong(title, artist, cover){
       artwork: cover ? [{src:cover,sizes:"600x600",type:"image/jpeg"}] : [{src:"icon-192.png",sizes:"192x192",type:"image/png"},{src:"icon-512.png",sizes:"512x512",type:"image/png"}] }); }catch(e){}
   }
 }
-function resetMeta(){
-  if("mediaSession" in navigator){ try{ navigator.mediaSession.metadata = new MediaMetadata({ title:"Радио Интерхит", artist:"На живо",
-    artwork:[{src:"icon-192.png",sizes:"192x192",type:"image/png"},{src:"icon-512.png",sizes:"512x512",type:"image/png"}] }); }catch(e){} }
+/* Заключен екран без песен: горе „Радио Интерхит“, долу девизът.
+   Когато има водещ, долният ред се сменя на 8 секунди с „В ефир: …“, като RDS в колата. */
+let rdsI = 0;
+function stationMeta(){
+  if(nowKey || !("mediaSession" in navigator)) return;
+  const line = (airHost && rdsI % 2) ? "В ефир: " + airHost : "Твоята музикална компания";
+  try{ navigator.mediaSession.metadata = new MediaMetadata({ title:"Радио Интерхит", artist:line, album:"Радио Интерхит",
+    artwork:[{src:"icon-192.png",sizes:"192x192",type:"image/png"},{src:"icon-512.png",sizes:"512x512",type:"image/png"}] }); }catch(e){}
 }
+function resetMeta(){ rdsI = 0; stationMeta(); }
+setInterval(()=>{ if(airHost && !nowKey){ rdsI++; stationMeta(); } }, 8000);
 function jsonp(url){ return new Promise((ok,bad)=>{ const cb="cb"+Date.now(), sc=document.createElement("script");
   window[cb]=d=>{ ok(d); delete window[cb]; sc.remove(); }; sc.onerror=()=>{ bad(); delete window[cb]; sc.remove(); };
   sc.src=url+"&callback="+cb; document.head.appendChild(sc); setTimeout(()=>bad(),8000); }); }
@@ -674,7 +687,8 @@ function myId(){
 }
 function mbGet(params){
   const q = new URLSearchParams(params).toString();
-  return fetch(MAILBOX_URL + "?" + q, {cache:"no-store"}).then(r=>r.json());
+  const ctl = new AbortController(), tm = setTimeout(()=>ctl.abort(), 20000);   // увиснала заявка не чака вечно
+  return fetch(MAILBOX_URL + "?" + q, {cache:"no-store", signal:ctl.signal}).then(r=>r.json()).finally(()=>clearTimeout(tm));
 }
 let airHost = null;
 function setAirInfo(d){
@@ -683,7 +697,7 @@ function setAirInfo(d){
   const txt = host ? "В ефир: " + host : "В момента няма никой в ефир.";
   setText($("airLine"), txt); setHid($("airLine"), false);
   setText($("wNote"), host ? "Поздравите се четат в ефир сега." : "Можеш да пишеш, когато има водещ в ефир.");   // не повтаря реда „В ефир“ горе
-  if("mediaSession" in navigator && navigator.mediaSession.metadata){ try{ navigator.mediaSession.metadata.artist = host ? "с " + host : "Радио Интерхит"; }catch(e){} }
+  rdsI = host ? 1 : 0; stationMeta();   // при влизане в ефир първо се показва водещият
 }
 function setMbOpen(open){
   const was = mbOpen; mbOpen = !!open;
