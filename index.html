@@ -143,6 +143,11 @@ h3.small{margin:4px 0 0;font-size:1rem}
 .support{text-align:center}
 .note a{color:#ffb3b3}
 [hidden]{display:none!important}
+.vol{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+.vol label{font-weight:600;white-space:nowrap}
+.vol input{flex:1;min-width:0;height:2rem;accent-color:var(--red);cursor:pointer}
+.vol input:focus-visible{outline:3px solid #fff;outline-offset:4px;border-radius:6px}
+.vol output{min-width:3.2em;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -165,6 +170,11 @@ h3.small{margin:4px 0 0;font-size:1rem}
   <p id="airLine" class="airline" hidden></p>
   <p id="status" class="status">Натиснете „Пусни“, за да слушате.</p>
 
+  <div class="vol" id="volBox" hidden>
+    <label for="vol">Сила на звука</label>
+    <input type="range" id="vol" min="0" max="100" step="5" value="100" aria-valuetext="100 процента">
+    <output id="volOut" for="vol" aria-hidden="true">100%</output>
+  </div>
   <section class="now" id="nowBox" aria-label="Сега звучи" hidden>
     <div class="art" aria-hidden="true"><img id="cover" alt="" hidden><div class="eq" id="eq"><i></i><i></i><i></i><i></i></div></div>
     <div class="meta">
@@ -256,6 +266,25 @@ const $ = id => document.getElementById(id);
 /* Поддържа ли телефонът известия (дефинирано най-отгоре, за да е готово навсякъде) */
 const PUSH_OK = ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
 const audio = $("audio"), playBtn = $("play");
+/* Сила на звука: плъзгач за компютър и Android. На iPhone и iPad не се показва,
+   защото Apple позволява звукът да се сменя само от бутоните на телефона. */
+(function(){
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+  if(IOS) return;
+  const box=$("volBox"), vol=$("vol"), out=$("volOut");
+  let v=100; try{ const s=localStorage.getItem("volume"); if(s!==null && !isNaN(+s)) v=Math.max(0,Math.min(100,+s)); }catch(e){}
+  const apply=(save)=>{
+    v=+vol.value; audio.volume=v/100; audio.muted=(v===0);
+    const t = v===0 ? "Без звук" : v+" процента";
+    vol.setAttribute("aria-valuetext", t); out.textContent = v===0 ? "0%" : v+"%";
+    if(save){ try{ localStorage.setItem("volume", String(v)); }catch(e){} }
+  };
+  vol.value=v; apply(false);
+  vol.addEventListener("input", ()=>apply(true));
+  box.hidden=false;
+})();
+
+
 let wantPlaying = false, retry = 0, retryTimer = null, sleepTimer = null, sleepEnd = 0, sleepTick = null;
 
 /* Говорът за екранния четец: текстът изчезва след 5 секунди, за да не го прочете TalkBack/VoiceOver
